@@ -24,7 +24,7 @@ import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
-import { exchangeLifePilotTokenIfPresent, getLpContext, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome } from './lib/lifepilot.js'
+import { exchangeLifePilotTokenIfPresent, getLpContext, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome, restoreHostedChromeFromContext } from './lib/lifepilot.js'
 import { beginWorkout } from './sheets.jsx'
 
 bindUI(useUI)   // lets the shared controls open sheets without importing the store at module scope
@@ -59,6 +59,10 @@ function Shell() {
   useWakeLock(!!S.active && S.keepAwake !== false)
 
   const authed = user || isGuest
+
+  useEffect(() => {
+    restoreHostedChromeFromContext()
+  }, [lpWorkout, lpManage])
 
   useEffect(() => {
     if (lpWorkout && loc.pathname !== '/workout') navigate('/workout', { replace: true })

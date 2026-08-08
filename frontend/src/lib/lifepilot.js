@@ -35,11 +35,49 @@ function setLpContext(context) {
   sessionStorage.setItem(LP_CTX_KEY, JSON.stringify(context))
 }
 
+/** Sync document chrome for hosted LifePilot modes (iframe today, WebView later). */
+export function syncHostedChrome(mode) {
+  const root = document.documentElement
+  if (mode === 'workout') {
+    root.dataset.lpMode = 'workout'
+    document.body.classList.add('lp-hosted-workout')
+  } else if (mode === 'manage') {
+    root.dataset.lpMode = 'manage'
+    document.body.classList.remove('lp-hosted-workout')
+  } else {
+    delete root.dataset.lpMode
+    document.body.classList.remove('lp-hosted-workout')
+  }
+}
+
+export function restoreHostedChromeFromContext() {
+  const mode = getLpMode()
+  if (mode === 'manage') syncHostedChrome('manage')
+  else if (mode) syncHostedChrome('workout')
+}
+
+export function prepareHostedWorkoutLayout() {
+  syncHostedChrome('workout')
+  useStore.getState().update((state) => {
+    state.gifSize = 'mini'
+  })
+}
+
+export function requestLifePilotExit() {
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'lifepilot-exit-workout' }, '*')
+  }
+}
+
 /** Apply before React boot when embed=lifepilot is in the URL (avoids theme flash). */
 export function detectLifePilotEmbedParams() {
   const params = new URLSearchParams(window.location.search)
   if (params.get('embed') !== 'lifepilot') return false
   applyLifePilotEmbedChrome()
+  const hintedMode = params.get('lp_mode')
+  if (hintedMode === 'workout' || hintedMode === 'manage') {
+    syncHostedChrome(hintedMode)
+  }
   return true
 }
 
@@ -66,6 +104,11 @@ export async function exchangeLifePilotTokenIfPresent() {
   useStore.getState().setUser(user)
   setLpContext(context)
   applyLifePilotEmbedChrome()
+  if (context.mode === 'manage') {
+    syncHostedChrome('manage')
+  } else {
+    prepareHostedWorkoutLayout()
+  }
 
   const url = new URL(window.location.href)
   url.searchParams.delete('lp_token')

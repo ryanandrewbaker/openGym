@@ -20,7 +20,7 @@ import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-sha
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
-import { isLpMode, notifyLpCompletion, getLpContext } from './lib/lifepilot.js'
+import { isLpMode, isLpWorkoutMode, notifyLpCompletion, requestLifePilotExit, getLpContext } from './lib/lifepilot.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -926,7 +926,7 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
     <h4 className="sec" style={{ textAlign: 'left' }}>{t('What you just trained')}</h4>
     <BodyMap load={loadOfWorkouts([w])} body={st.body} />
     <div style={{ height: 14 }} />
-    <Button variant="primary" onClick={() => { close(); nav('/home') }}>{t('Nice!')}</Button>
+    <Button variant="primary" onClick={() => { close(); if (isLpWorkoutMode()) requestLifePilotExit(); else nav('/home') }}>{t('Nice!')}</Button>
   </div>
 }
 export function finishWorkout() {
