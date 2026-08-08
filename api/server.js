@@ -9,6 +9,7 @@ import {
   generateAuthenticationOptions, verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import webpush from 'web-push';
+import { registerLifePilotRoutes } from './integrations/lifepilot.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -546,6 +547,21 @@ const routes = {
   }
 };
 
+const lifepilot = registerLifePilotRoutes(routes, {
+  db,
+  saveDb,
+  stateFile,
+  readState,
+  atomicWrite,
+  json,
+  readBody,
+  makeSession,
+  sessionCookie,
+  SECRET,
+  readSession,
+  dataDir: DATA,
+});
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const key = req.method + ' ' + url.pathname;
@@ -556,4 +572,15 @@ http.createServer(async (req, res) => {
     console.error(key, e);
     if (!res.headersSent) json(res, 500, { error: 'server error' });
   }
-}).listen(PORT, () => console.log(`gym-api on :${PORT} (rpID=${RP_ID}, origin=${ORIGIN})`));
+}).listen(PORT, () => {
+  console.log(`gym-api on :${PORT} (rpID=${RP_ID}, origin=${ORIGIN})`);
+  if (lifepilot.completionRelay) {
+    void lifepilot.completionRelay.flushPendingOnStartup().then((result) => {
+      if (result.flushed > 0) {
+        console.log(`lifepilot completion relay flushed ${result.flushed} pending completion(s) on startup`);
+      }
+    }).catch((error) => {
+      console.error('lifepilot completion relay startup flush failed', error);
+    });
+  }
+});

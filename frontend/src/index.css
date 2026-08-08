@@ -932,3 +932,57 @@ h4.sec{
   .exmedia img{height:380px}
   .hm-wrap{display:flex;flex-direction:column;align-items:center}
 }
+
+/* ---------------------------------------------------------------- LifePilot embed */
+:root[data-embed="lifepilot"] {
+  --bg: #f5f8fc;
+  --bg-el: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eef3f9;
+  --surface-3: #d4e0ed;
+  --label: #1a2b42;
+  --label-2: #5a6d85;
+  --label-3: rgba(90, 109, 133, 0.55);
+  --label-4: rgba(90, 109, 133, 0.35);
+  --sep: #d4e0ed;
+  --sep-op: rgba(212, 224, 237, 0.85);
+  --acc: #0f356f;
+  --acc-2: #0c2a59;
+  --on-acc: #ffffff;
+  --acc-soft: color-mix(in srgb, var(--acc) 12%, transparent);
+  --acc-line: color-mix(in srgb, var(--acc) 28%, transparent);
+}
+
+html:has([data-embed="lifepilot"]),
+body.lp-embed {
+  overflow: hidden;
+  height: 100%;
+  background: var(--bg);
+}
+
+:root[data-embed="lifepilot"] #app,
+:root[data-embed="lifepilot"] #app.lp-embed-app {
+  max-width: none;
+  margin: 0;
+  padding: calc(var(--sat) + 4px) 12px calc(12px + var(--sab));
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+:root[data-embed="lifepilot"] body.resting #app {
+  padding-bottom: calc(140px + var(--sab));
+}
+
+:root[data-embed="lifepilot"] #tabbar {
+  display: none !important;
+}
+
+:root[data-embed="lifepilot"] #timer {
+  bottom: calc(12px + var(--sab));
+}
+
+@media (min-width: 768px) {
+  :root[data-embed="lifepilot"] #timer {
+    bottom: 24px;
+  }
+}

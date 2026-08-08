@@ -24,6 +24,8 @@ import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
+import { exchangeLifePilotTokenIfPresent, getLpContext, isLpMode, applyLifePilotEmbedChrome } from './lib/lifepilot.js'
+import { beginWorkout } from './sheets.jsx'
 
 bindUI(useUI)   // lets the shared controls open sheets without importing the store at module scope
 
@@ -42,7 +44,10 @@ function Shell() {
   const isGuest = useStore(s => s.isGuest())
   const langV = useLang()   // re-renders the whole shell when the language (pack) changes
   useEffect(() => { setNav(navigate) }, [navigate])
-  useEffect(() => { applyPrefs(S.theme, S.accent) }, [S.theme, S.accent])
+  useEffect(() => {
+    if (isLpMode()) applyLifePilotEmbedChrome()
+    else applyPrefs(S.theme, S.accent)
+  }, [S.theme, S.accent])
   useEffect(() => { setLang(S.lang || 'en') }, [S.lang])
   useEffect(() => { document.documentElement.lang = S.lang || 'en' }, [langV, S.lang])
   // every tab/route change starts at the top of the page
@@ -51,6 +56,11 @@ function Shell() {
   useWakeLock(!!S.active && S.keepAwake !== false)
 
   const authed = user || isGuest
+  const lpEmbed = isLpMode()
+  useEffect(() => {
+    if (lpEmbed && loc.pathname !== '/workout') navigate('/workout', { replace: true })
+  }, [lpEmbed, loc.pathname, navigate])
+
   if (!ready && !authed) return (
     <div id="app">
       <div style={{ paddingTop: '44vh', display: 'flex', justifyContent: 'center', fontSize: 34, color: 'var(--label-3)' }}>
@@ -63,9 +73,14 @@ function Shell() {
     <>
       {/* keyed on the route: a view that throws is contained, and switching tabs
           re-mounts the boundary, so the tab bar is always a way out */}
-      <div id="app" className="vfade" key={loc.pathname}>
+      <div id="app" className={'vfade' + (lpEmbed ? ' lp-embed-app' : '')} key={lpEmbed ? 'workout' : loc.pathname}>
         <ErrorBoundary>
-          {!authed ? <Login /> : (
+          {!authed ? <Login /> : lpEmbed ? (
+            <Routes>
+              <Route path="/workout" element={<Workout />} />
+              <Route path="*" element={<Navigate to="/workout" replace />} />
+            </Routes>
+          ) : (
             <Routes>
               <Route path="/home" element={<Home />} />
               <Route path="/plan" element={<Plan />} />
@@ -81,7 +96,7 @@ function Shell() {
           )}
         </ErrorBoundary>
       </div>
-      <TabBar onStart={startFlow} />
+      {!lpEmbed && <TabBar onStart={startFlow} />}
       <RestTimer />
       <Modals />
       <Toast />
@@ -91,6 +106,20 @@ function Shell() {
 
 export default function App() {
   const boot = useStore(s => s.boot)
-  useEffect(() => { boot() }, [boot])
+  useEffect(() => {
+    async function init() {
+      try {
+        await exchangeLifePilotTokenIfPresent()
+      } catch (e) {
+        console.error('LifePilot token exchange failed', e)
+      }
+      await boot()
+      const ctx = getLpContext()
+      if (ctx?.routineId && !useStore.getState().S.active) {
+        beginWorkout(ctx.routineId, ctx.bodyweightKg ?? null, { sessionId: ctx.externalSessionId })
+      }
+    }
+    void init()
+  }, [boot])
   return <HashRouter><Shell /></HashRouter>
 }
