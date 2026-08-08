@@ -17,6 +17,20 @@ export function getLpContext() {
   }
 }
 
+export function getLpMode() {
+  const context = getLpContext()
+  if (!context) return null
+  return context.mode === 'manage' ? 'manage' : 'workout'
+}
+
+export function isLpWorkoutMode() {
+  return isLpMode() && getLpMode() === 'workout'
+}
+
+export function isLpManageMode() {
+  return isLpMode() && getLpMode() === 'manage'
+}
+
 function setLpContext(context) {
   sessionStorage.setItem(LP_CTX_KEY, JSON.stringify(context))
 }
@@ -57,6 +71,7 @@ export async function exchangeLifePilotTokenIfPresent() {
   url.searchParams.delete('lp_token')
   url.searchParams.delete('routineId')
   url.searchParams.delete('externalSessionId')
+  url.searchParams.delete('lp_mode')
   window.history.replaceState({}, '', url.toString())
 
   return true
@@ -64,7 +79,7 @@ export async function exchangeLifePilotTokenIfPresent() {
 
 export async function notifyLpCompletion(workout) {
   const context = getLpContext()
-  if (!context) return
+  if (!context || context.mode === 'manage') return
 
   const enrichedWorkout = {
     ...workout,

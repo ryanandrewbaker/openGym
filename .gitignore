@@ -11,5 +11,6 @@ data/
 # Build output / deps
 frontend/dist/
 node_modules/
+api/lib/exercises-data.js
 *.log
 .DS_Store

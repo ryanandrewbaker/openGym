@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { openGymExerciseName, openGymExerciseNames } from "../lib/exercise-names.js";
 import { createLifePilotCompletionRelay } from "./lifepilot-completion-relay.js";
+import { applySeededRoutinesToState, routineMappingsFromState } from "./lifepilot-schedule.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
 const SERVICE_SECRET = process.env.LIFEPILOT_OPENGYM_SERVICE_SECRET || process.env.OPENGYM_SERVICE_SECRET || "";
@@ -78,14 +79,8 @@ function starterRoutines() {
   }));
 }
 
-function buildInitialState(bodyweightKg) {
-  const seeded = starterRoutines();
-  const routines = seeded.map((item) => {
-    const routine = { ...item.routine, id: item.openGymRoutineId };
-    return routine;
-  });
-
-  return {
+function buildInitialState(bodyweightKg, seeded = null) {
+  const state = {
     unit: "kg",
     restSec: 90,
     sound: true,
@@ -96,7 +91,7 @@ function buildInitialState(bodyweightKg) {
     body: "male",
     targetW: null,
     bodyweight: bodyweightKg != null ? [{ d: new Date().toISOString().slice(0, 10), w: bodyweightKg }] : [],
-    routines,
+    routines: [],
     week: {},
     dayPlan: {},
     exWeights: {},
@@ -109,6 +104,12 @@ function buildInitialState(bodyweightKg) {
     lifepilot: true,
     _ts: Date.now(),
   };
+
+  if (seeded) {
+    applySeededRoutinesToState(state, seeded);
+  }
+
+  return state;
 }
 
 function normalizeWorkoutCompletion(workout, context) {
@@ -226,17 +227,12 @@ export function registerLifePilotRoutes(routes, deps) {
       saveDb();
 
       const seeded = starterRoutines();
-      const state = buildInitialState(bodyweightKg);
-      state.routines = seeded.map((item) => ({ ...item.routine, id: item.openGymRoutineId }));
+      const state = buildInitialState(bodyweightKg, seeded);
       atomicWrite(stateFile(user.id), JSON.stringify(state));
 
       json(res, 200, {
         openGymUserId: user.id,
-        routines: seeded.map((item) => ({
-          weekdayIndex: item.weekdayIndex,
-          openGymRoutineId: item.openGymRoutineId,
-          routineName: item.routineName,
-        })),
+        routines: routineMappingsFromState(state),
       });
       return;
     }
@@ -244,31 +240,60 @@ export function registerLifePilotRoutes(routes, deps) {
     const state = readState(user.id) || buildInitialState(bodyweightKg);
     if (!state.routines?.length) {
       const seeded = starterRoutines();
-      state.routines = seeded.map((item) => ({ ...item.routine, id: item.openGymRoutineId }));
+      applySeededRoutinesToState(state, seeded);
+      state._ts = Date.now();
       atomicWrite(stateFile(user.id), JSON.stringify(state));
       json(res, 200, {
         openGymUserId: user.id,
-        routines: seeded.map((item) => ({
-          weekdayIndex: item.weekdayIndex,
-          openGymRoutineId: item.openGymRoutineId,
-          routineName: item.routineName,
-        })),
+        routines: routineMappingsFromState(state),
       });
       return;
     }
 
-    const routines = STARTER_SPEC.map((spec) => {
-      const routine = state.routines.find((entry) => entry.name === spec.name);
-      return routine
-        ? {
-            weekdayIndex: spec.weekdayIndex,
-            openGymRoutineId: routine.id,
-            routineName: routine.name,
-          }
-        : null;
-    }).filter(Boolean);
+    json(res, 200, { openGymUserId: user.id, routines: routineMappingsFromState(state) });
+  };
 
-    json(res, 200, { openGymUserId: user.id, routines });
+  routes["POST /integrations/lifepilot/routines"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    schedulePendingFlush(completionRelay);
+    const body = await readBody(req);
+    const openGymUserId = String(body.openGymUserId || "");
+    const profileId = String(body.profileId || "");
+    if (!openGymUserId || !profileId) {
+      return json(res, 400, { error: "openGymUserId and profileId required" });
+    }
+
+    const user = db.users.find((u) => u.id === openGymUserId && u.lifepilotProfileId === profileId);
+    if (!user) return json(res, 404, { error: "user not found" });
+
+    const state = readState(user.id);
+    if (!state) return json(res, 404, { error: "state not found" });
+
+    json(res, 200, { routines: routineMappingsFromState(state) });
+  };
+
+  routes["POST /integrations/lifepilot/manage-session"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    schedulePendingFlush(completionRelay);
+    const body = await readBody(req);
+    const openGymUserId = String(body.openGymUserId || "");
+    const profileId = String(body.profileId || "");
+    if (!openGymUserId || !profileId) {
+      return json(res, 400, { error: "openGymUserId and profileId required" });
+    }
+
+    const user = db.users.find((u) => u.id === openGymUserId && u.lifepilotProfileId === profileId);
+    if (!user) return json(res, 404, { error: "user not found" });
+
+    const exp = Date.now() + 5 * 60 * 1000;
+    const token = signBridgeToken({
+      mode: "manage",
+      openGymUserId,
+      profileId,
+      exp,
+    });
+
+    json(res, 200, { token, openGymUserId, expiresAt: exp });
   };
 
   routes["POST /integrations/lifepilot/session"] = async (req, res) => {
@@ -288,6 +313,7 @@ export function registerLifePilotRoutes(routes, deps) {
 
     const exp = Date.now() + 5 * 60 * 1000;
     const token = signBridgeToken({
+      mode: "workout",
       openGymUserId,
       profileId,
       externalSessionId,
@@ -308,13 +334,22 @@ export function registerLifePilotRoutes(routes, deps) {
 
     const user = db.users.find((u) => u.id === payload.openGymUserId);
     if (!user) return json(res, 404, { error: "user not found" });
+    if (user.lifepilotProfileId !== payload.profileId) {
+      return json(res, 403, { error: "profile mismatch" });
+    }
 
-    if (payload.bodyweightKg != null) {
-      const state = readState(user.id) || buildInitialState(payload.bodyweightKg);
-      const today = new Date().toISOString().slice(0, 10);
-      const existing = (state.bodyweight || []).filter((entry) => entry.d !== today);
-      state.bodyweight = [...existing, { d: today, w: payload.bodyweightKg }];
-      atomicWrite(stateFile(user.id), JSON.stringify(state));
+    const mode = payload.mode === "manage" ? "manage" : "workout";
+    if (mode === "workout") {
+      if (!payload.externalSessionId || !payload.routineId) {
+        return json(res, 400, { error: "workout token missing session context" });
+      }
+      if (payload.bodyweightKg != null) {
+        const state = readState(user.id) || buildInitialState(payload.bodyweightKg);
+        const today = new Date().toISOString().slice(0, 10);
+        const existing = (state.bodyweight || []).filter((entry) => entry.d !== today);
+        state.bodyweight = [...existing, { d: today, w: payload.bodyweightKg }];
+        atomicWrite(stateFile(user.id), JSON.stringify(state));
+      }
     }
 
     json(
@@ -323,12 +358,13 @@ export function registerLifePilotRoutes(routes, deps) {
       {
         user: { id: user.id, name: user.name, admin: false },
         context: {
+          mode,
           profileId: payload.profileId,
           openGymUserId: payload.openGymUserId,
-          externalSessionId: payload.externalSessionId,
-          routineId: payload.routineId,
-          wellnessOccurrenceId: payload.wellnessOccurrenceId,
-          bodyweightKg: payload.bodyweightKg,
+          externalSessionId: payload.externalSessionId || null,
+          routineId: payload.routineId || null,
+          wellnessOccurrenceId: payload.wellnessOccurrenceId || null,
+          bodyweightKg: payload.bodyweightKg ?? null,
         },
       },
       { "Set-Cookie": sessionCookie(user) },
