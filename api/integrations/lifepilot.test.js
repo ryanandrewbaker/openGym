@@ -136,6 +136,30 @@ test("routines endpoint reflects state.week including renamed and moved routines
   ]);
 });
 
+test("routine endpoint returns planned exercises for a routine", async () => {
+  const { call, dataDir } = makeHarness();
+
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-routine-detail",
+    displayName: "Ryan",
+  });
+  const userId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+
+  const routine = await call("POST /integrations/lifepilot/routine", {
+    profileId: "profile-routine-detail",
+    openGymUserId: userId,
+    routineId,
+  });
+
+  assert.equal(routine.status, 200);
+  assert.equal(routine.body.id, routineId);
+  assert.ok(Array.isArray(routine.body.exercises));
+  assert.ok(routine.body.exercises.length > 0);
+  assert.ok(routine.body.exercises[0].exerciseId);
+  assert.ok(routine.body.exercises[0].exerciseName);
+});
+
 test("existing provisioned user keeps custom routines and schedule", async () => {
   const { call, db, dataDir } = makeHarness();
 

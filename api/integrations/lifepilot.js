@@ -150,6 +150,24 @@ function normalizeWorkoutCompletion(workout, context) {
   };
 }
 
+function routineDetailFromState(state, routineId) {
+  const routine = (state?.routines || []).find((entry) => String(entry.id) === String(routineId));
+  if (!routine) {
+    return null;
+  }
+
+  return {
+    id: String(routine.id),
+    name: routine.name,
+    exercises: (routine.ex || []).map((entry) => ({
+      exerciseId: String(entry.id),
+      exerciseName: openGymExerciseName(entry.id),
+      sets: Number(entry.sets) || 0,
+      reps: Number(entry.reps) || 0,
+    })),
+  };
+}
+
 function schedulePendingFlush(completionRelay) {
   void completionRelay.flushPending().catch((error) => {
     console.error("lifepilot pending completion flush failed", error);
@@ -270,6 +288,29 @@ export function registerLifePilotRoutes(routes, deps) {
     if (!state) return json(res, 404, { error: "state not found" });
 
     json(res, 200, { routines: routineMappingsFromState(state) });
+  };
+
+  routes["POST /integrations/lifepilot/routine"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    schedulePendingFlush(completionRelay);
+    const body = await readBody(req);
+    const openGymUserId = String(body.openGymUserId || "");
+    const profileId = String(body.profileId || "");
+    const routineId = String(body.routineId || "");
+    if (!openGymUserId || !profileId || !routineId) {
+      return json(res, 400, { error: "openGymUserId, profileId, and routineId required" });
+    }
+
+    const user = db.users.find((u) => u.id === openGymUserId && u.lifepilotProfileId === profileId);
+    if (!user) return json(res, 404, { error: "user not found" });
+
+    const state = readState(user.id);
+    if (!state) return json(res, 404, { error: "state not found" });
+
+    const routine = routineDetailFromState(state, routineId);
+    if (!routine) return json(res, 404, { error: "routine not found" });
+
+    json(res, 200, routine);
   };
 
   routes["POST /integrations/lifepilot/manage-session"] = async (req, res) => {
