@@ -67,6 +67,9 @@ export function requestLifePilotExit() {
   if (window.parent !== window) {
     window.parent.postMessage({ type: 'lifepilot-exit-workout' }, '*')
   }
+  if (window.webkit?.messageHandlers?.lifepilot) {
+    window.webkit.messageHandlers.lifepilot.postMessage({ type: 'lifepilot-exit-workout' })
+  }
 }
 
 /** Apply before React boot when embed=lifepilot is in the URL (avoids theme flash). */
