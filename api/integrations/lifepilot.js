@@ -164,6 +164,7 @@ function routineDetailFromState(state, routineId) {
       exerciseName: openGymExerciseName(entry.id),
       sets: Number(entry.sets) || 0,
       reps: Number(entry.reps) || 0,
+      repsMin: entry.repsMin != null ? Number(entry.repsMin) : null,
     })),
   };
 }
