@@ -5,6 +5,7 @@ import { registerCustom } from '../lib/exercises.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
+import { applyNativeEmbedBridge, isLpEmbedRequest } from '../lib/lifepilot.js'
 
 const KEY = 'gym_state_v1'
 export const DEF = {
@@ -187,8 +188,17 @@ export const useStore = create((set, get) => {
       // refuse — the only way the switch reaches someone already inside is here, on their next
       // boot. Ending the session needs a positive `allow_guest: false`; see lib/guest.js for why
       // an unreachable server must not be allowed to lock anyone out (#42).
+      applyNativeEmbedBridge()
+
       const cfg = await get().loadConfig()
       if (!guestAllowed(cfg)) get().setGuest(false)
+
+      if (isLpEmbedRequest() && get().user) {
+        try { await get().pullState() } catch (e) { /* offline — keep local */ }
+        set({ ready: true })
+        return
+      }
+
       try {
         const me = await api('/api/me')
         get().setUser(me.user)
@@ -200,7 +210,9 @@ export const useStore = create((set, get) => {
           get().update(s => { s.reminder = { ...s.reminder, tz } })
         }
       } catch (e) {
-        if (e.status === 401) get().setUser(null)
+        // LifePilot embed authenticates via lp_token/native bridge. WKWebView may not persist the
+        // HttpOnly session cookie before /api/me runs — never wipe an embed user on 401.
+        if (e.status === 401 && !isLpEmbedRequest()) get().setUser(null)
       }
       set({ ready: true })
     }

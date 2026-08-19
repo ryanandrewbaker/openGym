@@ -24,7 +24,7 @@ import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
-import { exchangeLifePilotTokenIfPresent, getLpContext, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome, restoreHostedChromeFromContext } from './lib/lifepilot.js'
+import { exchangeLifePilotTokenIfPresent, getLpContext, isLpEmbedRequest, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome, applyNativeEmbedBridge, restoreHostedChromeFromContext } from './lib/lifepilot.js'
 import { beginWorkout } from './sheets.jsx'
 
 bindUI(useUI)   // lets the shared controls open sheets without importing the store at module scope
@@ -46,6 +46,7 @@ function Shell() {
   const lpWorkout = isLpWorkoutMode()
   const lpManage = isLpManageMode()
   const lpEmbed = lpWorkout || lpManage
+  const lpEmbedRequest = isLpEmbedRequest()
   useEffect(() => { setNav(navigate) }, [navigate])
   useEffect(() => {
     if (lpEmbed) applyLifePilotEmbedChrome()
@@ -88,7 +89,16 @@ function Shell() {
           re-mounts the boundary, so the tab bar is always a way out */}
       <div id="app" className={'vfade' + (lpEmbed ? ' lp-embed-app' : '')} key={lpEmbed ? (lpManage ? 'manage' : 'workout') : loc.pathname}>
         <ErrorBoundary>
-          {!authed ? <Login /> : lpWorkout ? (
+          {!authed ? (
+            lpEmbedRequest ? (
+              <div className="center" style={{ padding: '2rem 1.25rem', textAlign: 'center' }}>
+                <p className="sub" style={{ marginBottom: '0.75rem' }}>
+                  LifePilot could not sign you in to this workout session.
+                </p>
+                <p className="sub">Close this screen and try Resume again.</p>
+              </div>
+            ) : <Login />
+          ) : lpWorkout ? (
             <Routes>
               <Route path="/workout" element={<Workout />} />
               <Route path="*" element={<Navigate to="/workout" replace />} />
@@ -127,10 +137,12 @@ export default function App() {
   const boot = useStore(s => s.boot)
   useEffect(() => {
     async function init() {
-      try {
-        await exchangeLifePilotTokenIfPresent()
-      } catch (e) {
-        console.error('LifePilot token exchange failed', e)
+      if (!applyNativeEmbedBridge()) {
+        try {
+          await exchangeLifePilotTokenIfPresent()
+        } catch (e) {
+          console.error('LifePilot token exchange failed', e)
+        }
       }
       await boot()
       const ctx = getLpContext()
