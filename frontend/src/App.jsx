@@ -25,7 +25,9 @@ import Library from './views/Library.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
 import { exchangeLifePilotTokenIfPresent, getLpContext, isLpEmbedRequest, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome, applyNativeEmbedBridge, restoreHostedChromeFromContext } from './lib/lifepilot.js'
+import { shouldBeginEmbeddedWorkout } from './lib/lifepilot-embed-workout.js'
 import { beginWorkout } from './sheets.jsx'
+import { todayISO } from './lib/format.js'
 
 bindUI(useUI)   // lets the shared controls open sheets without importing the store at module scope
 
@@ -146,7 +148,7 @@ export default function App() {
       }
       await boot()
       const ctx = getLpContext()
-      if (ctx?.mode !== 'manage' && ctx?.routineId && !useStore.getState().S.active) {
+      if (shouldBeginEmbeddedWorkout(ctx, useStore.getState().S.active, todayISO())) {
         beginWorkout(ctx.routineId, ctx.bodyweightKg ?? null, { sessionId: ctx.externalSessionId })
       }
     }
