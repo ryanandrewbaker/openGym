@@ -1,5 +1,15 @@
 import crypto from "node:crypto";
 import { openGymExerciseName, openGymExerciseNames } from "../lib/exercise-names.js";
+import { EXDB } from "../lib/exercises-data.js";
+import {
+  convertLoad,
+  equipmentForCatalogue,
+  getLoadJumpPercent,
+  getNextAvailableLoad,
+  getPreviousAvailableLoad,
+  loadsInUnit,
+  maxLoadJumpPercent,
+} from "../lib/equipment-core.js";
 import { createLifePilotCompletionRelay } from "./lifepilot-completion-relay.js";
 import { applySeededRoutinesToState, routineMappingsFromState } from "./lifepilot-schedule.js";
 
@@ -150,6 +160,39 @@ function normalizeWorkoutCompletion(workout, context) {
   };
 }
 
+function catalogueEq(exerciseId) {
+  return EXDB.find((entry) => entry.id === exerciseId)?.eq || "";
+}
+
+function exerciseProgression(state, entry) {
+  const unit = state?.unit === "lb" ? "lb" : "kg";
+  const kit = equipmentForCatalogue(state, entry, catalogueEq(entry.id));
+  if (!kit) {
+    return {
+      currentLoadKg: convertLoad(entry.weight, unit, "kg"),
+      nextAvailableLoadKg: null,
+      previousAvailableLoadKg: null,
+      loadJumpPercent: null,
+      equipmentId: null,
+      equipmentName: null,
+    };
+  }
+  const loads = loadsInUnit(kit, unit);
+  const current = entry.weight != null ? Number(entry.weight) : null;
+  const next = current != null ? getNextAvailableLoad(current, loads) : null;
+  const prev = current != null ? getPreviousAvailableLoad(current, loads) : null;
+  return {
+    currentLoadKg: convertLoad(current, unit, "kg"),
+    nextAvailableLoadKg: convertLoad(next, unit, "kg"),
+    previousAvailableLoadKg: convertLoad(prev, unit, "kg"),
+    loadJumpPercent: next != null && current > 0 ? getLoadJumpPercent(current, next) : null,
+    equipmentId: kit.id,
+    equipmentName: kit.name,
+    maxLoadJumpPercent: maxLoadJumpPercent(kit),
+    loadsKg: loadsInUnit(kit, "kg"),
+  };
+}
+
 function routineDetailFromState(state, routineId) {
   const routine = (state?.routines || []).find((entry) => String(entry.id) === String(routineId));
   if (!routine) {
@@ -165,6 +208,7 @@ function routineDetailFromState(state, routineId) {
       sets: Number(entry.sets) || 0,
       reps: Number(entry.reps) || 0,
       repsMin: entry.repsMin != null ? Number(entry.repsMin) : null,
+      ...exerciseProgression(state, entry),
     })),
   };
 }

@@ -6,6 +6,7 @@ import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
 import { applyNativeEmbedBridge, isLpEmbedRequest } from '../lib/lifepilot.js'
+import { defaultEquipment } from '../lib/equipment.js'
 
 const KEY = 'gym_state_v1'
 export const DEF = {
@@ -17,7 +18,8 @@ export const DEF = {
   // that a profile which never chose (loaded state is overlaid on DEF, on every path: local,
   // server pull, backup import) still falls back to the `showRir` boolean this replaced and
   // keeps the column it had. See effortOf.
-  reminder: { on: false, time: '08:00', tz: null }, effort: null
+  reminder: { on: false, time: '08:00', tz: null }, effort: null,
+  equipment: defaultEquipment()
 }
 const clone = o => JSON.parse(JSON.stringify(o))
 

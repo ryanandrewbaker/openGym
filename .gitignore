@@ -12,5 +12,6 @@ data/
 frontend/dist/
 node_modules/
 api/lib/exercises-data.js
+api/lib/equipment-core.js
 *.log
 .DS_Store

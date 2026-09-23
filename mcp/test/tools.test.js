@@ -506,6 +506,25 @@ describe('muscle_balance', () => {
   })
 })
 
+describe('progression_next', () => {
+  test('returns equipment ladder context for a routine', () => {
+    const push = call('list_routines').routines.find(x => x.name === 'Push Day')
+    const r = call('progression_next', { routine_id: push.id })
+    expect(r.routine_name).toBe('Push Day')
+    expect(r.exercises.length).toBeGreaterThan(0)
+    const lateral = r.exercises.find(e => e.id === '0334')
+    expect(lateral).toBeTruthy()
+    expect(lateral.equipmentId).toBe('adjustable-dumbbells')
+    expect(lateral.equipmentName).toBe('Adjustable dumbbells')
+    expect(typeof lateral.progressionDecision).toBe('string')
+    expect(lateral).toHaveProperty('currentLoadKg')
+    expect(lateral).toHaveProperty('nextAvailableLoadKg')
+    expect(lateral).toHaveProperty('loadJumpPercent')
+    expect(lateral).toHaveProperty('reason')
+  })
+})
+
+
 /* ---------- shared: no-state fallback ---------- */
 
 describe('shared: no-state fallback', () => {
@@ -521,7 +540,8 @@ describe('shared: no-state fallback', () => {
       get_workout: { date: '2026-07-26' },
       get_bodyweight: {},
       estimate_1rm: {},
-      muscle_balance: { period: 'all' }
+      muscle_balance: { period: 'all' },
+      progression_next: {}
     }
     for (const t of TOOLS) {
       const r = t.handler(calls[t.name] || {})

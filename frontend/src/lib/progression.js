@@ -18,6 +18,17 @@
 
 import { modeOf, repStep } from './history.js'
 import { EXIDX } from './exercises.js'
+import {
+  climbLadder,
+  dropLadder,
+  equipmentForExercise,
+  getLoadJumpPercent,
+  getNextAvailableLoad,
+  getPreviousAvailableLoad,
+  ladderAppliesToLoad,
+  loadsInUnit,
+  maxLoadJumpPercent
+} from './equipment.js'
 
 export const POLICIES = ['off', 'linear', 'greyskull', 'double', 'time']
 
@@ -149,6 +160,66 @@ export function stallCount(sessions) {
   return n
 }
 
+function equipmentView(S, cfg, current) {
+  const unit = S.unit || 'kg'
+  const eq = equipmentForExercise(S, cfg)
+  const loads = eq ? loadsInUnit(eq, unit) : []
+  const cur = current == null ? null : Number(current)
+  const next = loads.length && cur != null ? getNextAvailableLoad(cur, loads) : null
+  const prev = loads.length && cur != null ? getPreviousAvailableLoad(cur, loads) : null
+  if (!eq) return undefined
+  return {
+    equipmentId: eq.id,
+    equipmentName: eq.name,
+    currentLoad: cur,
+    nextAvailableLoad: next,
+    previousAvailableLoad: prev,
+    loadJumpPercent: next != null && cur > 0 ? getLoadJumpPercent(cur, next) : null
+  }
+}
+
+function withEquipment(p, S, cfg, current, decision) {
+  const equipment = equipmentView(S, cfg, current != null ? current : p.weight)
+  if (!equipment && !decision) return p
+  return { ...p, equipment, progressionDecision: decision || p.kind }
+}
+
+// A large discrete jump is only taken when the session clearly beat the prescribed target
+// (every working set above the goal). Hitting the target exactly is not enough to jump 22 %.
+function beatTarget(last) {
+  return !!(last && last.ok && last.goal > 0 && last.low > last.goal)
+}
+
+function resolveIncrease(S, cfg, last, rungs, unit, inc) {
+  const w = last.weight
+  const eq = equipmentForExercise(S, cfg)
+  const loads = eq ? loadsInUnit(eq, unit) : []
+  if (!loads.length || !ladderAppliesToLoad(w, loads)) {
+    const step = (rungs > 1 ? inc * rungs : inc)
+    return { weight: snap(w + step, inc), decision: 'up', viaLadder: false, step }
+  }
+  const next = climbLadder(w, loads, rungs)
+  if (next == null) {
+    return { weight: w, decision: 'hold_max_load', viaLadder: true, next: null, jump: null }
+  }
+  const jump = getLoadJumpPercent(w, next)
+  const cap = maxLoadJumpPercent(eq)
+  if (jump != null && jump > cap && !beatTarget(last)) {
+    return { weight: w, decision: 'hold_large_jump', viaLadder: true, next, jump, cap }
+  }
+  return { weight: next, decision: 'up', viaLadder: true, next, jump, step: round1(next - w) }
+}
+
+function resolveDeload(S, cfg, current, unit, inc) {
+  const eq = equipmentForExercise(S, cfg)
+  const loads = eq ? loadsInUnit(eq, unit) : []
+  if (!loads.length || !ladderAppliesToLoad(current, loads)) {
+    return deloadTo(current, inc)
+  }
+  const toward = current * 0.9
+  return dropLadder(current, loads, toward) ?? getPreviousAvailableLoad(current, loads) ?? current
+}
+
 /**
  * The next prescription for one exercise.
  *
@@ -162,11 +233,16 @@ export function nextPrescription(S, cfg, routine) {
   const policy = policyFor(cfg, routine, mode)
   const unit = S.unit || 'kg'
   const inc = cfg.inc > 0 ? cfg.inc : (mode === 'time' ? DEFAULT_SEC_INCREMENT : defaultIncrement(cfg.id, unit))
-  if (policy === 'off') return { policy, kind: 'off' }
+  if (policy === 'off') return withEquipment({ policy, kind: 'off' }, S, cfg, cfg.weight, 'off')
 
   const sessions = sessionsFor(S, cfg.id, cfg).filter(s => s.mode === mode)
   const last = sessions[sessions.length - 1]
-  if (!last) return { policy, kind: 'first', why: ['Nothing logged yet — this session sets the baseline.'] }
+  if (!last) {
+    return withEquipment(
+      { policy, kind: 'first', why: ['Nothing logged yet — this session sets the baseline.'] },
+      S, cfg, cfg.weight, 'first'
+    )
+  }
 
   const stalls = stallCount(sessions)
   const deloadAt = DELOAD_AFTER[policy] || 3
@@ -208,16 +284,40 @@ export function nextPrescription(S, cfg, routine) {
     const next = goal + repStep(cfg)
     return { policy, kind: 'up', weight: 0, reps: next, why: ['Bodyweight — every rep last time, so go for {0} this time.', next] }
   }
+
+  const finishIncrease = (resolved, reps, whyUp) => {
+    const eqName = (equipmentForExercise(S, cfg) || {}).name || 'equipment'
+    if (resolved.decision === 'hold_max_load') {
+      return withEquipment({
+        policy, kind: 'hold', weight: w, reps: last.goal,
+        why: ['At the top of the {0} ladder ({1} {2}) — keep progressing at this load.', eqName, w, unit]
+      }, S, cfg, w, 'hold_max_load')
+    }
+    if (resolved.decision === 'hold_large_jump') {
+      return withEquipment({
+        policy, kind: 'hold', weight: w, reps: last.goal,
+        why: ['Next available load is {0} {1} (+{2}%) — stay at {3} {1} until you beat the current target.', resolved.next, unit, resolved.jump, w]
+      }, S, cfg, w, 'hold_large_jump')
+    }
+    return withEquipment({ policy, kind: 'up', weight: resolved.weight, reps, why: whyUp(resolved) }, S, cfg, w, 'up')
+  }
+
   if (policy === 'double') {
     const top = cfg.reps || last.goal || 10
     const bottom = Math.min(cfg.repsMin || Math.max(1, top - 2), top)
-    if (last.ok) return { policy, kind: 'up', weight: snap(w + inc, inc), reps: bottom, why: ['Top of the rep range in every set — {0} {1} more, back to {2} reps.', inc, unit, bottom] }
+    if (last.ok) {
+      return finishIncrease(
+        resolveIncrease(S, cfg, last, 1, unit, inc),
+        bottom,
+        resolved => ['Top of the rep range in every set — {0} {1} more, back to {2} reps.', resolved.step, unit, bottom]
+      )
+    }
     if (stalls >= deloadAt) {
-      const dw = deloadTo(w, inc)
-      return { policy, kind: 'deload', weight: dw, reps: bottom, why: ['Stalled {0} sessions — deload to {1} {2}.', stalls, dw, unit] }
+      const dw = resolveDeload(S, cfg, w, unit, inc)
+      return withEquipment({ policy, kind: 'deload', weight: dw, reps: bottom, why: ['Stalled {0} sessions — deload to {1} {2}.', stalls, dw, unit] }, S, cfg, w, 'deload')
     }
     const aim = Math.min(top, Math.max(bottom, last.low + repStep(cfg)))
-    return { policy, kind: 'hold', weight: w, reps: aim, why: ['Same weight — aim for {0} reps this time.', aim] }
+    return withEquipment({ policy, kind: 'hold', weight: w, reps: aim, why: ['Same weight — aim for {0} reps this time.', aim] }, S, cfg, w, 'hold')
   }
 
   // linear + greyskull
@@ -225,24 +325,26 @@ export function nextPrescription(S, cfg, routine) {
     // Greyskull's final set is taken to failure: double the target reps there and you have
     // earned a double jump.
     const dbl = policy === 'greyskull' && last.goal > 0 && last.amrap >= last.goal * 2
-    const step = dbl ? inc * 2 : inc
-    return {
-      policy, kind: 'up', weight: snap(w + step, inc),
-      why: dbl
-        ? ['Last set hit {0} reps — twice the target, so take a double jump of {1} {2}.', last.amrap, step, unit]
-        : ['Every rep last time — {0} {1} more.', step, unit]
-    }
+    return finishIncrease(
+      resolveIncrease(S, cfg, last, dbl ? 2 : 1, unit, inc),
+      undefined,
+      resolved => dbl
+        ? ['Last set hit {0} reps — twice the target, so take a double jump of {1} {2}.', last.amrap, resolved.step, unit]
+        : resolved.viaLadder
+          ? ['Every rep last time — next available load is {0} {1} (+{2}%).', resolved.weight, unit, resolved.jump]
+          : ['Every rep last time — {0} {1} more.', resolved.step, unit]
+    )
   }
   if (stalls >= deloadAt) {
-    const dw = deloadTo(w, inc)
-    return {
+    const dw = resolveDeload(S, cfg, w, unit, inc)
+    return withEquipment({
       policy, kind: 'deload', weight: dw,
       why: stalls > 1
         ? ['Missed reps {0} sessions running — reset to {1} {2} and work back up.', stalls, dw, unit]
         : ['Missed reps — reset to {0} {1} and work back up.', dw, unit]
-    }
+    }, S, cfg, w, 'deload')
   }
-  return { policy, kind: 'hold', weight: w, why: ['Missed reps last time — same weight again ({0} of {1} to go).', deloadAt - stalls, deloadAt] }
+  return withEquipment({ policy, kind: 'hold', weight: w, why: ['Missed reps last time — same weight again ({0} of {1} to go).', deloadAt - stalls, deloadAt] }, S, cfg, w, 'hold')
 }
 
 /**

@@ -12,7 +12,8 @@ import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
 import { loadStarterPlan, confirmSheet, importFromApp } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
-import { Section, Row, SelectRow, Switch, Segmented, Button, TextField } from '../components/ui.jsx'
+import { Section, Row, SelectRow, Switch, Segmented, Button, TextField, TextArea } from '../components/ui.jsx'
+import { equipmentList, parseLoadList, formatLoadList, DEFAULT_MAX_LOAD_JUMP_PERCENT } from '../lib/equipment.js'
 
 export default function Settings() {
   const nav = useNavigate()
@@ -113,6 +114,16 @@ export default function Settings() {
           options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]}
           value={S.unit} onChange={v => update(s => { s.unit = v })} />
       </Row>
+    </Section>
+
+    <Section title={t('Equipment')} footer={t('Selectable loads constrain automatic progression. Matching exercises use the next available load instead of a fixed increment. Leave a kit empty to fall back to the old step size.')}>
+      {equipmentList(S).map((eq, i) => (
+        <EquipmentEditor key={eq.id || i} eq={eq} unit={S.unit} onChange={next => update(s => {
+          const list = equipmentList(s).map(item => ({ ...item, loads: (item.loads || []).slice() }))
+          list[i] = next
+          s.equipment = list
+        })} />
+      ))}
     </Section>
 
     {/* ---------- during a workout ---------- */}
@@ -325,6 +336,37 @@ function PushCard({ S, update, toast }) {
     </Section>
     {on && <div style={{ marginTop: -12, marginBottom: 22 }}><Button size="sm" icon="bell" onClick={test}>{t('Send test notification')}</Button></div>}
   </>
+}
+
+function EquipmentEditor({ eq, unit, onChange }) {
+  const loads = formatLoadList(eq.loads)
+  const jump = eq.maxLoadJumpPercent > 0 ? eq.maxLoadJumpPercent : DEFAULT_MAX_LOAD_JUMP_PERCENT
+  return (
+    <div className="lrow" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, paddingTop: 13, paddingBottom: 14 }}>
+      <div className="lrow-t">{eq.name || t('Adjustable dumbbells')}</div>
+      <div className="muted small">{t('Catalogue match: {0}', eq.eq || t('none'))} · {eq.unit || unit}</div>
+      <TextArea
+        value={loads}
+        onChange={e => onChange({ ...eq, loads: parseLoadList(e.target.value) })}
+        placeholder="5, 7, 9, 11, …"
+        rows={3}
+      />
+      <Row title={t('Max load jump')} subtitle={t('Bigger jumps stay at the current load until you beat the target.')}>
+        <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+          <TextField
+            inputMode="decimal"
+            value={String(jump)}
+            onChange={e => {
+              const n = parseFloat(String(e.target.value).replace(',', '.'))
+              onChange({ ...eq, maxLoadJumpPercent: Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_LOAD_JUMP_PERCENT })
+            }}
+            style={{ width: 72, textAlign: 'right' }}
+          />
+          <span className="muted">%</span>
+        </div>
+      </Row>
+    </div>
+  )
 }
 
 // The same registration as the sign-in screen's, reached from Settings instead. It asks for

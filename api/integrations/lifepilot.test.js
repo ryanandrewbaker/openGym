@@ -158,6 +158,12 @@ test("routine endpoint returns planned exercises for a routine", async () => {
   assert.ok(routine.body.exercises.length > 0);
   assert.ok(routine.body.exercises[0].exerciseId);
   assert.ok(routine.body.exercises[0].exerciseName);
+  const lateral = routine.body.exercises.find((exercise) => exercise.exerciseId === "0334");
+  assert.ok(lateral);
+  assert.equal(lateral.equipmentId, "adjustable-dumbbells");
+  assert.ok(Array.isArray(lateral.loadsKg));
+  assert.equal(lateral.loadsKg[0], 5);
+  assert.equal(lateral.loadsKg[lateral.loadsKg.length - 1], 40);
 });
 
 test("existing provisioned user keeps custom routines and schedule", async () => {

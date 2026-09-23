@@ -503,3 +503,70 @@ describe('applyPrescription never touches warm-up rows (round 3)', () => {
     expect(out[0]).toEqual({ w: 20, r: 8, done: true, warmup: true })
   })
 })
+
+describe('equipment-aware load changes', () => {
+  const LATERAL = '0334'
+  const DB_BENCH = '0289'
+  const kit = () => ({ equipment: [{
+    id: 'adjustable-dumbbells',
+    name: 'Adjustable dumbbells',
+    eq: 'dumbbell',
+    unit: 'kg',
+    loads: [5, 7, 9, 11, 13, 15, 18, 20, 23, 25, 27, 29, 32, 34, 36, 38, 40],
+    maxLoadJumpPercent: 12
+  }] })
+
+  it('keeps lateral raises at 9 kg when 12 reps only meet the target (22% jump)', () => {
+    const cfg = { id: LATERAL, sets: 3, reps: 12, repsMin: 8, weight: 9, prog: 'double' }
+    const S = { ...hist(LATERAL, [[9, 12, 12, 12]], { sets: 3, reps: 12 }), ...kit() }
+    const p = nextPrescription(S, cfg)
+    expect(p.kind).toBe('hold')
+    expect(p.weight).toBe(9)
+    expect(p.progressionDecision).toBe('hold_large_jump')
+    expect(p.equipment.nextAvailableLoad).toBe(11)
+    expect(p.equipment.loadJumpPercent).toBe(22.2)
+  })
+
+  it('takes the 9 → 11 kg jump once every set beats the target', () => {
+    const cfg = { id: LATERAL, sets: 3, reps: 12, repsMin: 8, weight: 9, prog: 'double' }
+    const S = { ...hist(LATERAL, [[9, 13, 13, 13]], { sets: 3, reps: 12 }), ...kit() }
+    const p = nextPrescription(S, cfg)
+    expect(p.kind).toBe('up')
+    expect(p.weight).toBe(11)
+    expect(p.reps).toBe(8)
+  })
+
+  it('recommends 34 kg on dumbbell bench when 32 kg was clean (+6.25%)', () => {
+    const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: 32, prog: 'linear' }
+    const S = { ...hist(DB_BENCH, [[32, 8, 8, 8]], { sets: 3, reps: 8 }), ...kit() }
+    const p = nextPrescription(S, cfg)
+    expect(p.kind).toBe('up')
+    expect(p.weight).toBe(34)
+    expect(p.equipment.loadJumpPercent).toBe(6.3)
+  })
+
+  it('holds at 40 kg when the ladder is already maxed', () => {
+    const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: 40, prog: 'linear' }
+    const S = { ...hist(DB_BENCH, [[40, 8, 8, 8]], { sets: 3, reps: 8 }), ...kit() }
+    const p = nextPrescription(S, cfg)
+    expect(p.kind).toBe('hold')
+    expect(p.weight).toBe(40)
+    expect(p.progressionDecision).toBe('hold_max_load')
+  })
+
+  it('falls back to the fixed increment when no ladder is configured', () => {
+    const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: 32, prog: 'linear' }
+    const p = nextPrescription({ ...hist(DB_BENCH, [[32, 8, 8, 8]], { sets: 3, reps: 8 }), equipment: [] }, cfg)
+    expect(p.kind).toBe('up')
+    expect(p.weight).toBe(35)
+  })
+
+  it('does not rewrite historical workouts when computing the next load', () => {
+    const cfg = { id: LATERAL, sets: 3, reps: 12, repsMin: 8, weight: 9, prog: 'double' }
+    const S = { ...hist(LATERAL, [[9, 12, 12, 12]], { sets: 3, reps: 12 }), ...kit() }
+    const before = JSON.stringify(S.workouts)
+    nextPrescription(S, cfg)
+    expect(JSON.stringify(S.workouts)).toBe(before)
+  })
+})
+

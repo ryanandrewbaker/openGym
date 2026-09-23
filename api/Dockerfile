@@ -6,6 +6,7 @@ COPY api/server.js ./
 COPY api/integrations ./integrations
 COPY api/lib ./lib
 COPY frontend/src/lib/exercises-data.js ./lib/exercises-data.js
+COPY frontend/src/lib/equipment-core.js ./lib/equipment-core.js
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "server.js"]

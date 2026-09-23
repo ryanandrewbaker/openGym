@@ -4,7 +4,7 @@
 import { z } from 'zod'
 import { getState, getUser } from './state.js'
 import {
-  setLabel, exLine, muscleName, policyName, friendlyDuration, ratio, muscleOrder
+  setLabel, exLine, muscleName, policyName, friendlyDuration, ratio, muscleOrder, fmt
 } from './labels.js'
 import {
   modeOf, workoutVolume, setsDone, effectiveRoutine, effectiveRoutineId
@@ -14,6 +14,8 @@ import {
   estimate1RM, best1RM, e1rmSeries, DEFAULT_FORMULA, REP_CAP
 } from '../../frontend/src/lib/onerm.js'
 import { loadOfWorkouts, rankOf, levelsOf } from '../../frontend/src/lib/muscles.js'
+import { nextPrescription } from '../../frontend/src/lib/progression.js'
+import { convertLoad } from '../../frontend/src/lib/equipment.js'
 
 /* ---------- helpers ---------- */
 
@@ -124,7 +126,8 @@ export const getRoutine = {
           increment: cfg.inc != null ? cfg.inc : undefined,
           policy_override: cfg.policy || null,
           superset_group: cfg.sg || null,
-          summary: exLine(cfg, S.unit || 'kg')
+          summary: exLine(cfg, S.unit || 'kg'),
+          progression: progressionView(S, { ...cfg, id: cfg.id }, r)
         }
       })
     }
@@ -214,6 +217,36 @@ function plannedSets(w) {
   let n = 0
   ;(w.entries || []).forEach(e => { n += (e.sets || []).length })
   return n
+}
+
+function reasonText(plan) {
+  if (!plan || !plan.why || !plan.why.length) return null
+  return fmt(plan.why[0], plan.why.slice(1))
+}
+
+function toKg(value, unit) {
+  if (value == null || value === '') return null
+  return convertLoad(value, unit === 'lb' ? 'lb' : 'kg', 'kg')
+}
+
+export function progressionView(S, cfg, routine) {
+  const unit = S.unit || 'kg'
+  const plan = nextPrescription(S, cfg, routine)
+  const eq = plan.equipment || {}
+  return {
+    currentLoadKg: toKg(eq.currentLoad ?? plan.weight, unit),
+    nextAvailableLoadKg: toKg(eq.nextAvailableLoad, unit),
+    previousAvailableLoadKg: toKg(eq.previousAvailableLoad, unit),
+    loadJumpPercent: eq.loadJumpPercent ?? null,
+    equipmentId: eq.equipmentId || null,
+    equipmentName: eq.equipmentName || null,
+    progressionDecision: plan.progressionDecision || plan.kind,
+    reason: reasonText(plan),
+    kind: plan.kind,
+    policy: plan.policy,
+    weight: plan.weight,
+    reps: plan.reps
+  }
 }
 
 /** get_workout — full entry/set breakdown for one date. */
@@ -377,8 +410,40 @@ export const muscleBalance = {
 
 /* ---------- registration list ---------- */
 
+/** progression_next — what the policy + equipment ladder prescribe next. */
+export const progressionNext = {
+  name: 'progression_next',
+  description: 'Show the next load/rep prescription for each exercise in a routine, including equipment ladder context (currentLoadKg, nextAvailableLoadKg, loadJumpPercent, progressionDecision, reason). Use routine_id from list_routines, or omit it to use today\'s routine. Does not return bodyweight, nutrition, or other health data.',
+  schema: {
+    routine_id: z.string().min(1).optional().describe('Routine id from list_routines. Defaults to today\'s planned routine.')
+  },
+  handler: ({ routine_id }) => {
+    const S = getState()
+    if (!S) return noState()
+    const today = new Date()
+    const isoToday = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
+    const r = routine_id
+      ? (S.routines || []).find(x => x.id === routine_id)
+      : effectiveRoutine(S, isoToday)
+    if (!r) { const e = new Error(routine_id ? `no routine with id ${JSON.stringify(routine_id)}` : 'no routine scheduled today'); e.code = 'ENOENT'; throw e }
+    return {
+      routine_id: r.id,
+      routine_name: r.name,
+      unit: S.unit || 'kg',
+      exercises: (r.ex || []).map(cfg => {
+        const ex = exOr(cfg.id)
+        return {
+          id: cfg.id,
+          name: ex.n,
+          ...progressionView(S, { ...cfg, id: cfg.id }, r)
+        }
+      })
+    }
+  }
+}
+
 export const TOOLS = [
-  listRoutines, getRoutine, getWeekPlan, listWorkouts, getWorkout, getBodyweight, estimate1rm, muscleBalance
+  listRoutines, getRoutine, getWeekPlan, listWorkouts, getWorkout, getBodyweight, estimate1rm, muscleBalance, progressionNext
 ]
 
 function noState() {
