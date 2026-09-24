@@ -15,7 +15,7 @@ import { Button, Check, NumberField } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
-import { isLpWorkoutMode, requestLifePilotExit } from '../lib/lifepilot.js'
+import { isLpWorkoutMode, notifyLpWorkoutLeft, requestLifePilotExit } from '../lib/lifepilot.js'
 
 /* ---------- start chooser (no active workout) ---------- */
 function StartChooser() {
@@ -286,7 +286,11 @@ function ActiveWorkout() {
     title: t('End workout?'),
     message: t('Return to LifePilot. Your in-progress session stays saved until you finish or discard it.'),
     confirmText: t('End workout'),
-    onConfirm: () => { stopRest(); requestLifePilotExit() },
+    onConfirm: () => {
+      stopRest()
+      notifyLpWorkoutLeft(A.id, done > 0)
+      requestLifePilotExit()
+    },
   })
 
   return <div className="narrow">

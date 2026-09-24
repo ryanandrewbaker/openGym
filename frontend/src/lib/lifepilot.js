@@ -2,6 +2,23 @@ import { api } from './api.js'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import { exOr } from './exercises.js'
+import {
+  emitBeginWorkoutBridge,
+  emitFinishWorkoutBridge,
+  notifyLpWorkoutFinished,
+  notifyLpWorkoutLeft,
+  notifyLpWorkoutStarted,
+  requestLifePilotExit,
+} from './lifepilot-workout-bridge.js'
+
+export {
+  emitBeginWorkoutBridge,
+  emitFinishWorkoutBridge,
+  notifyLpWorkoutFinished,
+  notifyLpWorkoutLeft,
+  notifyLpWorkoutStarted,
+  requestLifePilotExit,
+}
 
 const LP_CTX_KEY = 'lp_context'
 const LP_EMBED_FLAG_KEY = 'lp_embed_request'
@@ -80,16 +97,6 @@ export function prepareHostedWorkoutLayout() {
   })
 }
 
-export function requestLifePilotExit() {
-  if (window.parent !== window) {
-    window.parent.postMessage({ type: 'lifepilot-exit-workout' }, '*')
-  }
-  if (window.webkit?.messageHandlers?.lifepilot) {
-    window.webkit.messageHandlers.lifepilot.postMessage({ type: 'lifepilot-exit-workout' })
-  }
-}
-
-/** Apply before React boot when embed=lifepilot is in the URL (avoids theme flash). */
 export function detectLifePilotEmbedParams() {
   return stashLifePilotEmbedParams()
 }
