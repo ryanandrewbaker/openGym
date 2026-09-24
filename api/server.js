@@ -393,6 +393,16 @@ const routes = {
     const body = await readBody(req);
     if (!body.state || typeof body.state !== 'object') return json(res, 400, { error: 'state required' });
     delete body.state.active;              // in-progress workouts stay device-local
+    const incomingTs = body.state._ts || 0;
+    let existingTs = 0;
+    try {
+      existingTs = JSON.parse(fs.readFileSync(stateFile(user.id), 'utf8'))._ts || 0;
+    } catch {}
+    // A leftover iPhone copy can stamp a newer local _ts without being the live plan.
+    // Still reject strictly older writes so a restored plan is not immediately clobbered.
+    if (existingTs > incomingTs) {
+      return json(res, 200, { ok: true, ts: existingTs, ignored: true });
+    }
     atomicWrite(stateFile(user.id), JSON.stringify(body.state));
     json(res, 200, { ok: true, ts: body.state._ts || null });
   },

@@ -6,6 +6,7 @@ import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
 import { applyNativeEmbedBridge, isLpEmbedRequest } from '../lib/lifepilot.js'
+import { isLifePilotEmbedBoot, shouldApplyRemoteGymState, shouldKeepLocalActiveWorkout } from '../lib/gym-state-sync.js'
 import { defaultEquipment } from '../lib/equipment.js'
 
 const KEY = 'gym_state_v1'
@@ -24,6 +25,10 @@ export const DEF = {
 const clone = o => JSON.parse(JSON.stringify(o))
 
 function loadState() {
+  if (isLifePilotEmbedBoot()) {
+    try { localStorage.removeItem(KEY) } catch (e) { /* ignore */ }
+    return clone(DEF)
+  }
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) return Object.assign(clone(DEF), JSON.parse(raw))
@@ -125,13 +130,20 @@ export const useStore = create((set, get) => {
       try {
         const { state } = await api('/api/data')
         const S = get().S
+        const embed = isLifePilotEmbedBoot() || isLpEmbedRequest()
         const dirty = localStorage.getItem('gym_dirty') === '1'
-        if (state && (!hasData(S) || ((state._ts || 0) >= (S._ts || 0) && !dirty))) {
-          const active = S.active
+        if (shouldApplyRemoteGymState({
+          embed,
+          dirty,
+          hasLocalData: hasData(S),
+          hasRemote: Boolean(state),
+          localTs: S._ts,
+          remoteTs: state?._ts,
+        })) {
           const next = Object.assign(clone(DEF), state)
-          if (active) next.active = active
+          if (shouldKeepLocalActiveWorkout(embed) && S.active) next.active = S.active
           persist(next, false)
-        } else if (hasData(S)) { await get().pushState() }
+        } else if (!embed && hasData(S)) { await get().pushState() }
       } catch (e) { /* offline — keep local */ }
     },
 
