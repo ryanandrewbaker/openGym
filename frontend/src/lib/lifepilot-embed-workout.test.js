@@ -12,13 +12,34 @@ describe("shouldBeginEmbeddedWorkout", () => {
     expect(shouldBeginEmbeddedWorkout(sunday, null)).toBe(true);
   });
 
-  it("keeps the in-progress workout when LifePilot is resuming that same session", () => {
+  it("keeps the in-progress workout when LifePilot is resuming that same session with logged sets", () => {
     expect(
       shouldBeginEmbeddedWorkout(sunday, {
         id: "session-sunday",
         routineId: "shoulders-hinge",
-      }),
+        d: "2026-09-24",
+        entries: [{ id: "0405", sets: [{ done: true }] }],
+      }, "2026-09-24"),
     ).toBe(false);
+  });
+
+  it("rebuilds today's unused session so later routine edits replace the snapshot", () => {
+    expect(
+      shouldBeginEmbeddedWorkout(
+        {
+          mode: "workout",
+          routineId: "back-shoulders-biceps",
+          externalSessionId: "session-thursday",
+        },
+        {
+          id: "session-thursday",
+          routineId: "back-shoulders-biceps",
+          d: "2026-09-24",
+          entries: [{ id: "0327", sets: [{ done: false }] }, { id: "0406", sets: [{ done: false }] }],
+        },
+        "2026-09-24",
+      ),
+    ).toBe(true);
   });
 
   it("starts Sunday's routine instead of leaving Saturday's leftover session on screen", () => {
