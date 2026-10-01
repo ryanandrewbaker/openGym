@@ -17,3 +17,10 @@ export function shouldBeginEmbeddedWorkout(ctx, active, today = null) {
   // has been logged, so later plan edits (removed incline row / shrugs) apply.
   return !activeWorkoutHasCompletedSet(active);
 }
+
+/** What the embed should do so the native app can start the Apple strength workout. */
+export function embeddedWorkoutStartAction(ctx, active, today = null) {
+  if (shouldBeginEmbeddedWorkout(ctx, active, today)) return "begin";
+  if (!ctx || ctx.mode === "manage" || !active?.id || !active.start) return "none";
+  return "notify";
+}

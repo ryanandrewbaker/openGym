@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldBeginEmbeddedWorkout } from "./lifepilot-embed-workout.js";
+import { embeddedWorkoutStartAction, shouldBeginEmbeddedWorkout } from "./lifepilot-embed-workout.js";
 
 describe("shouldBeginEmbeddedWorkout", () => {
   const sunday = {
@@ -89,5 +89,32 @@ describe("shouldBeginEmbeddedWorkout", () => {
     expect(
       shouldBeginEmbeddedWorkout({ mode: "manage", routineId: "r1" }, null),
     ).toBe(false);
+  });
+
+  it("notifies the native app when resuming a session that already has logged sets", () => {
+    const active = {
+      id: "session-sunday",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T01:00:00.000Z"),
+      entries: [{ id: "0405", sets: [{ done: true }] }],
+    };
+    expect(embeddedWorkoutStartAction(sunday, active, "2026-09-24")).toBe("notify");
+  });
+
+  it("begins a new embedded workout when nothing is in progress", () => {
+    expect(embeddedWorkoutStartAction(sunday, null)).toBe("begin");
+  });
+
+  it("stays quiet in manage mode and without a start clock", () => {
+    expect(embeddedWorkoutStartAction({ mode: "manage", routineId: "r1" }, null)).toBe("none");
+    expect(
+      embeddedWorkoutStartAction(sunday, {
+        id: "session-sunday",
+        routineId: "shoulders-hinge",
+        d: "2026-09-24",
+        entries: [{ id: "0405", sets: [{ done: true }] }],
+      }, "2026-09-24"),
+    ).toBe("none");
   });
 });

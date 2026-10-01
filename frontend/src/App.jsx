@@ -24,8 +24,8 @@ import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
-import { exchangeLifePilotTokenIfPresent, getLpContext, isLpEmbedRequest, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome, applyNativeEmbedBridge, restoreHostedChromeFromContext } from './lib/lifepilot.js'
-import { shouldBeginEmbeddedWorkout } from './lib/lifepilot-embed-workout.js'
+import { emitBeginWorkoutBridge, exchangeLifePilotTokenIfPresent, getLpContext, isLpEmbedRequest, isLpManageMode, isLpWorkoutMode, applyLifePilotEmbedChrome, applyNativeEmbedBridge, restoreHostedChromeFromContext } from './lib/lifepilot.js'
+import { embeddedWorkoutStartAction } from './lib/lifepilot-embed-workout.js'
 import { beginWorkout } from './sheets.jsx'
 import { todayISO } from './lib/format.js'
 
@@ -148,8 +148,12 @@ export default function App() {
       }
       await boot()
       const ctx = getLpContext()
-      if (shouldBeginEmbeddedWorkout(ctx, useStore.getState().S.active, todayISO())) {
+      const active = useStore.getState().S.active
+      const action = embeddedWorkoutStartAction(ctx, active, todayISO())
+      if (action === 'begin') {
         beginWorkout(ctx.routineId, ctx.bodyweightKg ?? null, { sessionId: ctx.externalSessionId })
+      } else if (action === 'notify') {
+        emitBeginWorkoutBridge(active)
       }
     }
     void init()
