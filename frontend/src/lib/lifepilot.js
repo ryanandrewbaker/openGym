@@ -5,6 +5,7 @@ import { exOr } from './exercises.js'
 import {
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
+  notifyLpWorkoutDiscarded,
   notifyLpWorkoutFinished,
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
@@ -14,6 +15,7 @@ import {
 export {
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
+  notifyLpWorkoutDiscarded,
   notifyLpWorkoutFinished,
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,

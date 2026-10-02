@@ -16,6 +16,8 @@ import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { isLpWorkoutMode, notifyLpWorkoutLeft, requestLifePilotExit } from '../lib/lifepilot.js'
+import { isStaleActiveWorkout, logWorkoutSession } from '../lib/active-workout-session.js'
+import { discardActiveWorkout, finishWorkoutAt } from '../sheets.jsx'
 
 /* ---------- start chooser (no active workout) ---------- */
 function StartChooser() {
@@ -360,7 +362,45 @@ function ActiveWorkout() {
   </div>
 }
 
+function StaleWorkoutRecovery({ active }) {
+  const update = useStore(s => s.update)
+  const logged = active.entries.reduce((count, entry) => count + entry.sets.filter(set => set.done).length, 0)
+  return <div className="narrow">
+    <div className="hdr"><div><h1>{t('Workout interrupted')}</h1>
+      <div className="sub">{active.name} · {t('{0} sets', logged)}</div></div></div>
+    <div className="card">
+      <p className="muted small">{t('This workout was left unfinished. Logged sets stay saved until you discard them.')}</p>
+      <Button variant="primary" onClick={() => {
+        logWorkoutSession('recovery-resumed', { sessionId: active.id, status: 'active' })
+        update(s => { s.active.status = 'active' })
+      }}>{t('Resume workout')}</Button>
+      <div style={{ height: 8 }} />
+      <Button onClick={() => {
+        logWorkoutSession('recovery-finished', { sessionId: active.id, status: 'completed' })
+        finishWorkoutAt(active.updatedAt || active.start)
+      }}>{t('Finish at last known activity')}</Button>
+      <div style={{ height: 8 }} />
+      <Button variant="ghost" className="dim" onClick={() => confirmSheet({
+        title: t('Discard workout?'),
+        message: t('The sets you logged in this session will be lost.'),
+        confirmText: t('Discard'),
+        danger: true,
+        onConfirm: discardActiveWorkout,
+      })}>{t('Discard')}</Button>
+    </div>
+  </div>
+}
+
 export default function Workout() {
   const active = useStore(s => s.S.active)
-  return active ? <ActiveWorkout /> : <StartChooser />
+  const update = useStore(s => s.update)
+  const stale = !!(active && isStaleActiveWorkout(active, Date.now()))
+  useEffect(() => {
+    if (!active || stale || active.status !== 'interrupted') return
+    logWorkoutSession('recovery-resumed', { sessionId: active.id, status: 'active' })
+    update(s => { if (s.active?.status === 'interrupted') s.active.status = 'active' })
+  }, [active, stale, update])
+  if (!active) return <StartChooser />
+  if (stale) return <StaleWorkoutRecovery active={active} />
+  return <ActiveWorkout />
 }

@@ -7,6 +7,13 @@ import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
 import { applyNativeEmbedBridge, isLpEmbedRequest } from '../lib/lifepilot.js'
 import { isLifePilotEmbedBoot, shouldApplyRemoteGymState, shouldKeepLocalActiveWorkout } from '../lib/gym-state-sync.js'
+import {
+  DURABLE_ACTIVE_WORKOUT_KEY,
+  isStaleActiveWorkout,
+  logWorkoutSession,
+  markInterrupted,
+  resolveRestoredActive,
+} from '../lib/active-workout-session.js'
 import { defaultEquipment } from '../lib/equipment.js'
 
 const KEY = 'gym_state_v1'
@@ -38,6 +45,39 @@ function loadState() {
 
 const hasData = st => !!((st.workouts || []).length || (st.routines || []).length || (st.bodyweight || []).length)
 
+function readDurableActive() {
+  try {
+    const raw = localStorage.getItem(DURABLE_ACTIVE_WORKOUT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function writeDurableActive(active, previous) {
+  try {
+    if (active) {
+      localStorage.setItem(DURABLE_ACTIVE_WORKOUT_KEY, JSON.stringify(active))
+      return
+    }
+    // Keep a closed marker until the server has caught up. Deleting the key and then
+    // crashing before the push would restore the previous in-progress copy.
+    if (previous?.id) {
+      localStorage.setItem(DURABLE_ACTIVE_WORKOUT_KEY, JSON.stringify({
+        id: previous.id,
+        start: previous.start || 1,
+        status: 'completed',
+      }))
+      return
+    }
+    const existing = readDurableActive()
+    if (existing?.status === 'completed' || existing?.status === 'cancelled') return
+    localStorage.removeItem(DURABLE_ACTIVE_WORKOUT_KEY)
+  } catch { /* storage can be full or blocked */ }
+}
+
 export const useStore = create((set, get) => {
   let pushTm = null
   let saveTm = null
@@ -49,15 +89,33 @@ export const useStore = create((set, get) => {
     saveTm = setTimeout(() => { saveTm = null; nativeSave(get().S); syncReminder(get().S) }, 800)
   }
 
-  const persist = (S, push = true) => {
+  const persist = (S, push = true, { touchActive = false } = {}) => {
+    if (touchActive && S.active) {
+      const prev = get().S.active
+      if (prev && prev.id === S.active.id && prev.start) S.active.start = prev.start
+      S.active.updatedAt = Date.now()
+      if (S.active.status !== 'completed' && S.active.status !== 'cancelled') S.active.status = 'active'
+    }
     S._ts = Date.now()
     registerCustom(S.customEx)
+    const previousActive = get().S.active
+    writeDurableActive(S.active, previousActive)
     localStorage.setItem(KEY, JSON.stringify(S))
     set({ S })
+    if (S.active?.id && JSON.stringify(previousActive) !== JSON.stringify(S.active)) {
+      logWorkoutSession('persisted', { sessionId: S.active.id, status: S.active.status || 'active' })
+    }
     if (MOBILE) nativePersist()
     if (push && get().user) {
+      const activeChanged = JSON.stringify(previousActive) !== JSON.stringify(S.active)
       clearTimeout(pushTm)
-      pushTm = setTimeout(() => get().pushState(), 1500)
+      pushTm = null
+      if (activeChanged) {
+        // A debounced write can die with the process before the last completed set is stored.
+        void get().pushState()
+      } else {
+        pushTm = setTimeout(() => get().pushState(), 1500)
+      }
     }
   }
 
@@ -86,6 +144,7 @@ export const useStore = create((set, get) => {
     localStorage.removeItem('gym_dirty')
     localStorage.removeItem(KEY)
     persist(clone(DEF), false)
+    localStorage.removeItem(DURABLE_ACTIVE_WORKOUT_KEY)
   }
 
   return {
@@ -97,7 +156,7 @@ export const useStore = create((set, get) => {
     update(mut, push = true) {
       const S = clone(get().S)
       mut(S)
-      persist(S, push)
+      persist(S, push, { touchActive: !!S.active })
     },
     replaceState(S, push = false) { persist(clone(S), push) },
 
@@ -132,6 +191,12 @@ export const useStore = create((set, get) => {
         const S = get().S
         const embed = isLifePilotEmbedBoot() || isLpEmbedRequest()
         const dirty = localStorage.getItem('gym_dirty') === '1'
+        const remoteWorkoutIds = (state?.workouts || []).map(workout => workout.id)
+        const restoredActive = resolveRestoredActive({
+          localActive: readDurableActive() || (shouldKeepLocalActiveWorkout(embed) ? S.active : null),
+          remoteActive: state?.active ?? null,
+          remoteWorkoutIds,
+        })
         if (shouldApplyRemoteGymState({
           embed,
           dirty,
@@ -141,10 +206,33 @@ export const useStore = create((set, get) => {
           remoteTs: state?._ts,
         })) {
           const next = Object.assign(clone(DEF), state)
-          if (shouldKeepLocalActiveWorkout(embed) && S.active) next.active = S.active
-          persist(next, false)
+          next.active = restoredActive ? markInterrupted(restoredActive) : null
+          if (next.active) {
+            logWorkoutSession('recovery-detected', {
+              sessionId: next.active.id,
+              status: isStaleActiveWorkout(next.active, Date.now()) ? 'stale' : next.active.status,
+            })
+          }
+          const serverSets = (state?.active?.entries || []).reduce(
+            (count, entry) => count + (entry.sets || []).filter(set => set.done).length, 0)
+          const restoredSets = (restoredActive?.entries || []).reduce(
+            (count, entry) => count + (entry.sets || []).filter(set => set.done).length, 0)
+          persist(next, restoredSets > serverSets)
+        } else if (restoredActive && !S.active) {
+          const next = clone(S)
+          next.active = markInterrupted(restoredActive)
+          logWorkoutSession('recovery-detected', { sessionId: next.active.id, status: next.active.status })
+          persist(next, true)
         } else if (!embed && hasData(S)) { await get().pushState() }
-      } catch (e) { /* offline — keep local */ }
+      } catch (e) {
+        const restored = markInterrupted(resolveRestoredActive({ localActive: readDurableActive() }))
+        if (restored && !get().S.active) {
+          const next = clone(get().S)
+          next.active = restored
+          logWorkoutSession('recovery-detected', { sessionId: restored.id, status: restored.status })
+          persist(next, false)
+        }
+      }
     },
 
     async signOut() {

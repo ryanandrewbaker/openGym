@@ -111,6 +111,38 @@ test("workout session token includes mode workout and requires session context",
   assert.equal(exchanged.body.context.externalSessionId, "ext-1");
 });
 
+test("workout session token carries an optional LifePilot prescription", async () => {
+  const { call } = makeHarness();
+
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-prescription",
+    displayName: "Ryan",
+  });
+
+  const session = await call("POST /integrations/lifepilot/session", {
+    profileId: "profile-prescription",
+    openGymUserId: provisioned.body.openGymUserId,
+    externalSessionId: "ext-rx",
+    routineId: provisioned.body.routines[0].openGymRoutineId,
+    prescription: [
+      { exerciseId: "0025", sets: 4, loadKg: 34, repsMin: 8, repsMax: 12 },
+      { exerciseId: "0334", sets: 3, loadKg: null, repsMin: 8, repsMax: 12 },
+    ],
+  });
+  assert.equal(session.status, 200);
+
+  const exchanged = await call(
+    "POST /integrations/lifepilot/exchange-token",
+    { token: session.body.token },
+    { auth: false },
+  );
+  assert.equal(exchanged.status, 200);
+  assert.deepEqual(exchanged.body.context.prescription, [
+    { exerciseId: "0025", sets: 4, loadKg: 34, repsMin: 8, repsMax: 12 },
+    { exerciseId: "0334", sets: 3, loadKg: null, repsMin: 8, repsMax: 12 },
+  ]);
+});
+
 test("routines endpoint reflects state.week including renamed and moved routines", async () => {
   const { call, dataDir } = makeHarness();
 

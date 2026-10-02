@@ -151,7 +151,7 @@ export default function App() {
       const active = useStore.getState().S.active
       const action = embeddedWorkoutStartAction(ctx, active, todayISO())
       if (action === 'begin') {
-        beginWorkout(ctx.routineId, ctx.bodyweightKg ?? null, { sessionId: ctx.externalSessionId })
+        beginWorkout(ctx.routineId, ctx.bodyweightKg ?? null, { sessionId: ctx.externalSessionId, prescription: ctx.prescription })
       } else if (action === 'notify') {
         emitBeginWorkoutBridge(active)
       }

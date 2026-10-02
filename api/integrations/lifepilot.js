@@ -11,6 +11,7 @@ import {
   maxLoadJumpPercent,
 } from "../lib/equipment-core.js";
 import { createLifePilotCompletionRelay } from "./lifepilot-completion-relay.js";
+import { completionTiming } from "../lib/workout-duration.js";
 import { applySeededRoutinesToState, routineMappingsFromState } from "./lifepilot-schedule.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
@@ -145,6 +146,11 @@ function normalizeWorkoutCompletion(workout, context) {
     };
   });
 
+  const timing = completionTiming(workout);
+  console.info("[workout-session] completion", {
+    sessionId: workout.id,
+    durationSeconds: timing.durationSeconds,
+  });
   return {
     externalSessionId: workout.id,
     profileId: context.profileId,
@@ -152,9 +158,9 @@ function normalizeWorkoutCompletion(workout, context) {
     wellnessOccurrenceId: context.wellnessOccurrenceId || null,
     externalRoutineId: workout.routineId || context.routineId || null,
     routineName: workout.name || null,
-    startedAt: new Date(workout.start).toISOString(),
-    completedAt: new Date(workout.end || Date.now()).toISOString(),
-    durationSeconds: Math.max(0, Math.round(((workout.end || Date.now()) - workout.start) / 1000)),
+    startedAt: timing.startedAt,
+    completedAt: timing.completedAt,
+    durationSeconds: timing.durationSeconds,
     exercises,
     rawEnginePayload: workout,
   };
@@ -265,6 +271,23 @@ export function registerLifePilotRoutes(routes, deps) {
     } catch {
       return null;
     }
+  }
+
+  function sanitizeSessionPrescription(value) {
+    if (!Array.isArray(value) || value.length === 0) return undefined;
+    const out = [];
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object" || entry.exerciseId == null) continue;
+      const loadKg = entry.loadKg == null ? null : Number(entry.loadKg);
+      out.push({
+        exerciseId: String(entry.exerciseId),
+        sets: Math.max(1, Number(entry.sets) || 1),
+        loadKg: loadKg != null && Number.isFinite(loadKg) ? loadKg : null,
+        repsMin: Math.max(1, Number(entry.repsMin) || 1),
+        repsMax: Math.max(1, Number(entry.repsMax) || Number(entry.repsMin) || 1),
+      });
+    }
+    return out.length > 0 ? out : undefined;
   }
 
   routes["POST /integrations/lifepilot/provision"] = async (req, res) => {
@@ -406,6 +429,7 @@ export function registerLifePilotRoutes(routes, deps) {
       routineId,
       wellnessOccurrenceId: body.wellnessOccurrenceId || null,
       bodyweightKg: body.bodyweightKg != null ? Number(body.bodyweightKg) : null,
+      prescription: sanitizeSessionPrescription(body.prescription),
       exp,
     });
 
@@ -451,6 +475,7 @@ export function registerLifePilotRoutes(routes, deps) {
           routineId: payload.routineId || null,
           wellnessOccurrenceId: payload.wellnessOccurrenceId || null,
           bodyweightKg: payload.bodyweightKg ?? null,
+          prescription: payload.prescription ?? null,
         },
       },
       { "Set-Cookie": sessionCookie(user) },

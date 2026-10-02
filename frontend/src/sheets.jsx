@@ -19,9 +19,11 @@ import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
+import { buildWorkoutEntries } from './lib/lifepilot-prescription.js'
 import { equipmentForExercise } from './lib/equipment.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
-import { isLpMode, isLpWorkoutMode, notifyLpCompletion, emitBeginWorkoutBridge, emitFinishWorkoutBridge, requestLifePilotExit, getLpContext } from './lib/lifepilot.js'
+import { isLpMode, isLpWorkoutMode, notifyLpCompletion, emitBeginWorkoutBridge, emitFinishWorkoutBridge, notifyLpWorkoutDiscarded, requestLifePilotExit, getLpContext } from './lib/lifepilot.js'
+import { durationSecondsFor, logWorkoutSession } from './lib/active-workout-session.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -827,7 +829,7 @@ export function WorkoutRow({ w, onClick }) {
 export function startFlow(routineId) {
   if (isLpMode()) {
     const ctx = getLpContext()
-    beginWorkout(routineId, ctx?.bodyweightKg ?? null, { sessionId: ctx?.externalSessionId })
+    beginWorkout(routineId, ctx?.bodyweightKg ?? null, { sessionId: ctx?.externalSessionId, prescription: ctx?.prescription })
     return
   }
   bwSheet({ required: true, onDone: bw => beginWorkout(routineId, bw) })
@@ -835,17 +837,32 @@ export function startFlow(routineId) {
 export function beginWorkout(routineId, bw, opts = {}) {
   const st = S()
   const r = routineId ? st.routines.find(x => x.id === routineId) : null
-  // The prescription is applied as the session is built, so you walk up to the bar with the
-  // right weight already on the screen instead of being told about it afterwards. `plan` is
-  // kept on the entry purely so the workout can explain the number it chose.
-  const entries = (r ? r.ex : []).map(cfg => {
-    const plan = nextPrescription(st, cfg, r)
-    return { id: cfg.id, sg: cfg.sg, target: { ...cfg }, plan, sets: applyPrescription(buildSets(st, cfg), plan) }
+  // LifePilot may pass a canonical prescription. When it is present, those entries skip
+  // nextPrescription() so Today, review, and the session all use the same targets.
+  const prescriptionList = opts.prescription ?? getLpContext()?.prescription ?? null
+  const entries = buildWorkoutEntries(st, r, prescriptionList, {
+    nextPrescription,
+    applyPrescription,
+    buildSets,
   })
+  const now = Date.now()
   update(s => {
-    s.active = { id: opts.sessionId || uid(), d: todayISO(), start: Date.now(), routineId, name: r ? r.name : t('Freestyle'), bw: bw || null, cur: 0, entries }
+    const sameSession = opts.sessionId && s.active?.id === opts.sessionId && s.active.start
+    s.active = {
+      id: opts.sessionId || uid(),
+      d: todayISO(),
+      start: sameSession ? s.active.start : now,
+      updatedAt: now,
+      status: 'active',
+      routineId,
+      name: r ? r.name : t('Freestyle'),
+      bw: bw || null,
+      cur: 0,
+      entries,
+    }
   })
   const started = S().active
+  logWorkoutSession('created', { sessionId: started?.id, status: started?.status })
   emitBeginWorkoutBridge(started)
   useUI.getState().stopRest()
   nav('/workout')
@@ -943,10 +960,21 @@ export function finishWorkout() {
   if (done < total) { confirmSheet({ title: t('Finish early?'), message: t(total - done === 1 ? '{0} set still unchecked. Finish the workout now?' : '{0} sets still unchecked. Finish the workout now?', total - done), confirmText: t('Finish workout'), onConfirm: doFinishWorkout }); return }
   doFinishWorkout()
 }
-function doFinishWorkout() {
+export function finishWorkoutAt(endedAt) {
+  doFinishWorkout({ endedAt })
+}
+export function discardActiveWorkout() {
+  const active = S().active
+  if (!active) return
+  logWorkoutSession('discarded', { sessionId: active.id, status: 'cancelled' })
+  update(s => { s.active = null })
+  notifyLpWorkoutDiscarded(active.id)
+}
+function doFinishWorkout(opts = {}) {
   const st = S()
   const A = st.active
   if (!A) return
+  const end = opts.endedAt || Date.now()
   const prs = []
   const e1prs = []
   A.entries.forEach(e => {
@@ -958,7 +986,7 @@ function doFinishWorkout() {
     if (rec && !prs.includes(e.id)) e1prs.push({ id: e.id, ...rec })
   })
   const w = {
-    id: A.id, d: A.d, start: A.start, end: Date.now(), routineId: A.routineId, name: A.name, bw: A.bw,
+    id: A.id, d: A.d, start: A.start, end, routineId: A.routineId, name: A.name, bw: A.bw,
     // `target` (what the session prescribed) is kept alongside the sets: without it a
     // finished workout cannot say whether it hit its reps, and a timed session reads back
     // as "0 reps". It is what the progression engine works from.
@@ -975,6 +1003,8 @@ function doFinishWorkout() {
     s.active = null
   })
   useUI.getState().stopRest()
+  logWorkoutSession('completed', { sessionId: w.id, status: 'completed' })
+  console.info('[workout-session] duration', { sessionId: w.id, durationSeconds: durationSecondsFor(A, end) })
   beep(snd(), 880, 0.15); beep(snd(), 1100, 0.15, 0.18); beep(snd(), 1320, 0.3, 0.36)
   if (isLpMode()) {
     emitFinishWorkoutBridge(w)

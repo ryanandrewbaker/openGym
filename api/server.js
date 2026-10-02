@@ -10,6 +10,7 @@ import {
 } from '@simplewebauthn/server';
 import webpush from 'web-push';
 import { registerLifePilotRoutes } from './integrations/lifepilot.js';
+import { mergeGymState } from './lib/gym-state-merge.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -392,19 +393,26 @@ const routes = {
     if (!user) return json(res, 401, { error: 'not signed in' });
     const body = await readBody(req);
     if (!body.state || typeof body.state !== 'object') return json(res, 400, { error: 'state required' });
-    delete body.state.active;              // in-progress workouts stay device-local
     const incomingTs = body.state._ts || 0;
-    let existingTs = 0;
+    let existing = null;
     try {
-      existingTs = JSON.parse(fs.readFileSync(stateFile(user.id), 'utf8'))._ts || 0;
+      existing = JSON.parse(fs.readFileSync(stateFile(user.id), 'utf8'));
     } catch {}
+    const existingTs = existing?._ts || 0;
     // A leftover iPhone copy can stamp a newer local _ts without being the live plan.
     // Still reject strictly older writes so a restored plan is not immediately clobbered.
     if (existingTs > incomingTs) {
       return json(res, 200, { ok: true, ts: existingTs, ignored: true });
     }
-    atomicWrite(stateFile(user.id), JSON.stringify(body.state));
-    json(res, 200, { ok: true, ts: body.state._ts || null });
+    const merged = mergeGymState(existing, body.state);
+    if (merged?.active?.id) {
+      console.info('[workout-session] persisted', {
+        sessionId: merged.active.id,
+        status: merged.active.status || 'active',
+      });
+    }
+    atomicWrite(stateFile(user.id), JSON.stringify(merged));
+    json(res, 200, { ok: true, ts: merged._ts || null });
   },
 
   'GET /api/push/public-key': async (req, res) => json(res, 200, { key: vapid.publicKey }),

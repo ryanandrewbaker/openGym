@@ -48,6 +48,18 @@ export function notifyLpWorkoutLeft(sessionId, hasLoggedSets) {
   postLifePilotMessage(workoutLeftPayload(sessionId, hasLoggedSets))
 }
 
+export function workoutDiscardedPayload(sessionId) {
+  return {
+    type: 'lifepilot-workout-discarded',
+    sessionId,
+  }
+}
+
+export function notifyLpWorkoutDiscarded(sessionId) {
+  if (!isLpWorkoutMode() || !sessionId) return
+  postLifePilotMessage(workoutDiscardedPayload(sessionId))
+}
+
 export function requestLifePilotExit() {
   postLifePilotMessage({ type: 'lifepilot-exit-workout' })
 }
