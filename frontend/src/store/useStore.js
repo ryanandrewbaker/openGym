@@ -14,7 +14,7 @@ import {
   markInterrupted,
   resolveRestoredActive,
 } from '../lib/active-workout-session.js'
-import { defaultEquipment } from '../lib/equipment.js'
+import { applyDumbbellLadderMigration, defaultEquipment } from '../lib/equipment.js'
 
 const KEY = 'gym_state_v1'
 export const DEF = {
@@ -38,7 +38,17 @@ function loadState() {
   }
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return Object.assign(clone(DEF), JSON.parse(raw))
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      const merged = Object.assign(clone(DEF), parsed)
+      const before = merged.equipment
+      applyDumbbellLadderMigration(merged)
+      if (merged.equipment !== before && parsed && typeof parsed === 'object') {
+        parsed.equipment = merged.equipment
+        try { localStorage.setItem(KEY, JSON.stringify(parsed)) } catch (err) { /* ignore */ }
+      }
+      return merged
+    }
   } catch (e) { /* ignore */ }
   return clone(DEF)
 }
@@ -206,6 +216,7 @@ export const useStore = create((set, get) => {
           remoteTs: state?._ts,
         })) {
           const next = Object.assign(clone(DEF), state)
+          applyDumbbellLadderMigration(next)
           next.active = restoredActive ? markInterrupted(restoredActive) : null
           if (next.active) {
             logWorkoutSession('recovery-detected', {
@@ -267,7 +278,7 @@ export const useStore = create((set, get) => {
         const saved = await nativeLoad()
         const S = get().S
         if (saved && (!hasData(S) || (saved._ts || 0) >= (S._ts || 0))) {
-          persist(Object.assign(clone(DEF), saved), false)
+          persist(applyDumbbellLadderMigration(Object.assign(clone(DEF), saved)), false)
         } else if (hasData(S)) {
           nativeSave(S)   // first run after an update from a file-less version: seed the mirror
         }

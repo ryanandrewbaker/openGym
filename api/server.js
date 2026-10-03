@@ -11,6 +11,7 @@ import {
 import webpush from 'web-push';
 import { registerLifePilotRoutes } from './integrations/lifepilot.js';
 import { mergeGymState } from './lib/gym-state-merge.js';
+import { applyDumbbellLadderMigration } from './lib/equipment-core.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -384,6 +385,7 @@ const routes = {
     if (!user) return json(res, 401, { error: 'not signed in' });
     try {
       const state = JSON.parse(fs.readFileSync(stateFile(user.id), 'utf8'));
+      applyDumbbellLadderMigration(state);
       json(res, 200, { state });
     } catch { json(res, 200, { state: null }); }
   },
@@ -404,7 +406,7 @@ const routes = {
     if (existingTs > incomingTs) {
       return json(res, 200, { ok: true, ts: existingTs, ignored: true });
     }
-    const merged = mergeGymState(existing, body.state);
+    const merged = applyDumbbellLadderMigration(mergeGymState(existing, body.state));
     if (merged?.active?.id) {
       console.info('[workout-session] persisted', {
         sessionId: merged.active.id,

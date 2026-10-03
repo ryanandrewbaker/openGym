@@ -4,6 +4,7 @@ import {
   policyFor, defaultIncrement, POLICIES_FOR, DELOAD_AFTER, MAX_BW_SETS
 } from './progression.js'
 import { EXDB } from './exercises.js'
+import { defaultEquipment } from './equipment.js'
 
 const LIFT = EXDB.find(e => e.bp !== 'cardio' && !['upper legs', 'lower legs', 'back', 'hips', 'glutes'].includes(e.bp)).id
 const HEAVY = EXDB.find(e => e.bp === 'upper legs').id
@@ -507,14 +508,7 @@ describe('applyPrescription never touches warm-up rows (round 3)', () => {
 describe('equipment-aware load changes', () => {
   const LATERAL = '0334'
   const DB_BENCH = '0289'
-  const kit = () => ({ equipment: [{
-    id: 'adjustable-dumbbells',
-    name: 'Adjustable dumbbells',
-    eq: 'dumbbell',
-    unit: 'kg',
-    loads: [5, 7, 9, 11, 13, 15, 18, 20, 23, 25, 27, 29, 32, 34, 36, 38, 40],
-    maxLoadJumpPercent: 12
-  }] })
+  const kit = () => ({ equipment: defaultEquipment() })
 
   it('keeps lateral raises at 9 kg when 12 reps only meet the target (22% jump)', () => {
     const cfg = { id: LATERAL, sets: 3, reps: 12, repsMin: 8, weight: 9, prog: 'double' }
@@ -567,6 +561,67 @@ describe('equipment-aware load changes', () => {
     const before = JSON.stringify(S.workouts)
     nextPrescription(S, cfg)
     expect(JSON.stringify(S.workouts)).toBe(before)
+  })
+
+  it('takes the real rung across the uneven dumbbell steps', () => {
+    const cases = [
+      [20, 22],
+      [29, 32],
+      [38, 40],
+    ]
+    for (const [current, next] of cases) {
+      const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: current, prog: 'linear' }
+      const S = { ...hist(DB_BENCH, [[current, 8, 8, 8]], { sets: 3, reps: 8 }), ...kit() }
+      const p = nextPrescription(S, cfg)
+      expect(p.kind).toBe('up')
+      expect(p.weight).toBe(next)
+    }
+  })
+
+  it('holds 22 kg when 25 kg is more than a 12% jump, then takes 25 kg once the target is beaten', () => {
+    const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: 22, prog: 'linear' }
+    const held = nextPrescription(
+      { ...hist(DB_BENCH, [[22, 8, 8, 8]], { sets: 3, reps: 8 }), ...kit() },
+      cfg,
+    )
+    expect(held.kind).toBe('hold')
+    expect(held.weight).toBe(22)
+    expect(held.progressionDecision).toBe('hold_large_jump')
+    expect(held.equipment.nextAvailableLoad).toBe(25)
+
+    const earned = nextPrescription(
+      { ...hist(DB_BENCH, [[22, 9, 9, 9]], { sets: 3, reps: 8 }), ...kit() },
+      cfg,
+    )
+    expect(earned.kind).toBe('up')
+    expect(earned.weight).toBe(25)
+  })
+
+  it('deload from 25 kg lands on 22 kg, not a fixed 2.5 kg step', () => {
+    const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: 25, prog: 'linear' }
+    const S = {
+      ...hist(DB_BENCH, [
+        [25, 8, 8, 8],
+        [25, 6, 6, 6],
+        [25, 6, 6, 6],
+        [25, 6, 6, 6],
+      ], { sets: 3, reps: 8 }),
+      ...kit(),
+    }
+    const before = JSON.stringify(S.workouts)
+    const p = nextPrescription(S, cfg)
+    expect(p.kind).toBe('deload')
+    expect(p.weight).toBe(22)
+    expect(JSON.stringify(S.workouts)).toBe(before)
+  })
+
+  it('prescribes the next real rung above a logged 23 kg set without rewriting it', () => {
+    const cfg = { id: DB_BENCH, sets: 3, reps: 8, weight: 23, prog: 'linear' }
+    const S = { ...hist(DB_BENCH, [[23, 8, 8, 8]], { sets: 3, reps: 8 }), ...kit() }
+    const p = nextPrescription(S, cfg)
+    expect(p.kind).toBe('up')
+    expect(p.weight).toBe(25)
+    expect(S.workouts[0].entries[0].sets[0].w).toBe(23)
   })
 })
 

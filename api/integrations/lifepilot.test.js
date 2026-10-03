@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { registerLifePilotRoutes } from "./lifepilot.js";
 import { routineMappingsFromState } from "./lifepilot-schedule.js";
+import { LEGACY_ADJUSTABLE_DUMBBELL_LOADS } from "../lib/equipment-core.js";
 
 const SERVICE_SECRET = "test-service-secret";
 
@@ -194,8 +195,8 @@ test("routine endpoint returns planned exercises for a routine", async () => {
   assert.ok(lateral);
   assert.equal(lateral.equipmentId, "adjustable-dumbbells");
   assert.ok(Array.isArray(lateral.loadsKg));
-  assert.equal(lateral.loadsKg[0], 5);
-  assert.equal(lateral.loadsKg[lateral.loadsKg.length - 1], 40);
+  assert.deepEqual(lateral.loadsKg, [5, 7, 9, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40]);
+  assert.equal(lateral.loadsKg.includes(23), false);
 });
 
 test("existing provisioned user keeps custom routines and schedule", async () => {
@@ -242,4 +243,41 @@ test("new provision seeds week mappings from generated routine IDs", async () =>
     assert.equal(state.week[String(mapping.weekdayIndex)], mapping.openGymRoutineId);
     assert.ok(state.routines.some((routine) => routine.id === mapping.openGymRoutineId));
   }
+});
+
+test("routine loads omit 23 kg when stored equipment still has the old default", async () => {
+  const { call, dataDir } = makeHarness();
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-legacy-ladder",
+    displayName: "Ryan",
+  });
+  const userId = provisioned.body.openGymUserId;
+  const file = path.join(dataDir, `state-${userId}.json`);
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  state.equipment = [{
+    id: "adjustable-dumbbells",
+    name: "Adjustable dumbbells",
+    eq: "dumbbell",
+    unit: "kg",
+    loads: [...LEGACY_ADJUSTABLE_DUMBBELL_LOADS],
+  }];
+  state.workouts = [{
+    id: "logged-23",
+    entries: [{ id: "0334", sets: [{ w: 23, r: 12, done: true }] }],
+  }];
+  fs.writeFileSync(file, JSON.stringify(state));
+
+  const routineId = provisioned.body.routines.find((routine) => routine.routineName === "Push Day").openGymRoutineId;
+  const routine = await call("POST /integrations/lifepilot/routine", {
+    profileId: "profile-legacy-ladder",
+    openGymUserId: userId,
+    routineId,
+  });
+  const lateral = routine.body.exercises.find((exercise) => exercise.exerciseId === "0334");
+  assert.equal(lateral.loadsKg.includes(22), true);
+  assert.equal(lateral.loadsKg.includes(23), false);
+
+  const stored = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(stored.workouts[0].entries[0].sets[0].w, 23);
+  assert.equal(stored.equipment[0].loads.includes(23), true);
 });

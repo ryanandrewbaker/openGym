@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_ADJUSTABLE_DUMBBELL_LOADS,
+  LEGACY_ADJUSTABLE_DUMBBELL_LOADS,
+  applyDumbbellLadderMigration,
   convertLoad,
   getNextAvailableLoad,
   getPreviousAvailableLoad,
@@ -9,7 +11,9 @@ import {
   parseLoadList,
   climbLadder,
   dropLadder,
+  stepAvailableLoad,
   equipmentForExercise,
+  loadsInUnit,
   defaultEquipment
 } from './equipment.js'
 
@@ -74,6 +78,62 @@ describe('load ladder helpers', () => {
 
   it('drops toward a 10% deload onto a real rung', () => {
     expect(dropLadder(40, LADDER, 36)).toBe(36)
+  })
+
+  it('is the adjustable dumbbell kit: 22 kg is a rung and 23 kg is not', () => {
+    expect([...LADDER]).toEqual([5, 7, 9, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40])
+    expect(LADDER).not.toContain(23)
+  })
+
+  it('steps the non-uniform rungs in both directions', () => {
+    const up = [
+      [20, 22],
+      [22, 25],
+      [29, 32],
+      [38, 40],
+    ]
+    for (const [current, next] of up) {
+      expect(getNextAvailableLoad(current, LADDER)).toBe(next)
+      expect(stepAvailableLoad(current, 1, LADDER)).toBe(next)
+      expect(getPreviousAvailableLoad(next, LADDER)).toBe(current)
+      expect(stepAvailableLoad(next, -1, LADDER)).toBe(current)
+    }
+  })
+
+  it('replaces a stored 23 kg default ladder and leaves logged sets unchanged', () => {
+    const state = {
+      equipment: [{
+        id: 'adjustable-dumbbells',
+        name: 'Adjustable dumbbells',
+        eq: 'dumbbell',
+        unit: 'kg',
+        loads: [...LEGACY_ADJUSTABLE_DUMBBELL_LOADS],
+      }],
+      workouts: [{ entries: [{ sets: [{ w: 23, r: 8, done: true }] }] }],
+    }
+    const before = JSON.stringify(state.workouts)
+    const loads = loadsInUnit(equipmentForExercise(state, { id: '0334' }), 'kg')
+    expect(loads).toEqual([...DEFAULT_ADJUSTABLE_DUMBBELL_LOADS])
+    expect(loads).not.toContain(23)
+    applyDumbbellLadderMigration(state)
+    expect(state.equipment[0].loads).toEqual([...DEFAULT_ADJUSTABLE_DUMBBELL_LOADS])
+    expect(JSON.stringify(state.workouts)).toBe(before)
+    expect(state.workouts[0].entries[0].sets[0].w).toBe(23)
+  })
+
+  it('leaves a hand-edited ladder that still lists 23 kg', () => {
+    const custom = [5, 10, 15, 23, 30]
+    const state = {
+      equipment: [{
+        id: 'adjustable-dumbbells',
+        name: 'Adjustable dumbbells',
+        eq: 'dumbbell',
+        unit: 'kg',
+        loads: custom,
+      }],
+    }
+    applyDumbbellLadderMigration(state)
+    expect(state.equipment[0].loads).toEqual(custom)
   })
 })
 

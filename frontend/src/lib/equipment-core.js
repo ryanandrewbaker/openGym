@@ -5,6 +5,13 @@ export const KG_PER_LB = 0.45359237
 export const DEFAULT_MAX_LOAD_JUMP_PERCENT = 12
 
 export const DEFAULT_ADJUSTABLE_DUMBBELL_LOADS = Object.freeze([
+  5, 7, 9, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40
+])
+
+// The first shipped default used 23 kg, which this kit cannot select. Profiles that
+// saved that exact list are corrected when the ladder is loaded or saved. A hand-edited
+// ladder is left alone, and logged set weights are never rewritten.
+export const LEGACY_ADJUSTABLE_DUMBBELL_LOADS = Object.freeze([
   5, 7, 9, 11, 13, 15, 18, 20, 23, 25, 27, 29, 32, 34, 36, 38, 40
 ])
 
@@ -114,9 +121,35 @@ export function loadsInUnit(equipment, unit) {
   return normalizeLadder(equipment.loads).map(load => convertLoad(load, from, to)).filter(v => v != null)
 }
 
+function sameLoadList(a, b) {
+  const left = normalizeLadder(a)
+  const right = normalizeLadder(b)
+  return left.length === right.length && left.every((load, i) => Math.abs(load - right[i]) < 0.05)
+}
+
+export function migrateStoredEquipment(equipment) {
+  if (!Array.isArray(equipment)) return equipment
+  let changed = false
+  const next = equipment.map(item => {
+    if (!item || item.id !== 'adjustable-dumbbells') return item
+    if ((item.unit || 'kg') !== 'kg') return item
+    if (!sameLoadList(item.loads, LEGACY_ADJUSTABLE_DUMBBELL_LOADS)) return item
+    changed = true
+    return { ...item, loads: DEFAULT_ADJUSTABLE_DUMBBELL_LOADS.slice() }
+  })
+  return changed ? next : equipment
+}
+
+export function applyDumbbellLadderMigration(state) {
+  if (!state || typeof state !== 'object' || !Array.isArray(state.equipment)) return state
+  const equipment = migrateStoredEquipment(state.equipment)
+  if (equipment !== state.equipment) state.equipment = equipment
+  return state
+}
+
 export function equipmentList(S) {
   const list = S && Array.isArray(S.equipment) ? S.equipment : null
-  if (list && list.length) return list
+  if (list && list.length) return migrateStoredEquipment(list)
   if (list && list.length === 0) return []
   return defaultEquipment()
 }
