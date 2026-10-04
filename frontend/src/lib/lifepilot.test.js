@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  applyCanonicalExecutionSnapshot,
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
+  isApplyingRemoteSnapshot,
+  notifyLpSetChanged,
   notifyLpWorkoutFinished,
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
@@ -111,5 +114,58 @@ describe("LifePilot workout lifecycle bridge", () => {
     notifyLpWorkoutStarted("session-1", Date.now());
     notifyLpWorkoutFinished("session-1", Date.now());
     expect(posted).toEqual([]);
+  });
+
+  it("posts a local set change and does not emit one when painting a remote snapshot", () => {
+    stubLpContext({ mode: "workout", routineId: "r1", externalSessionId: "session-1" });
+    const posted = [];
+    const win = {
+      webkit: {
+        messageHandlers: {
+          lifepilot: { postMessage: (payload) => posted.push(payload) },
+        },
+      },
+    };
+    win.parent = win;
+    vi.stubGlobal("window", win);
+
+    notifyLpSetChanged({
+      exerciseId: "bench",
+      setNumber: 1,
+      loadKg: 34,
+      reps: 8,
+      completed: true,
+    });
+    expect(posted).toEqual([
+      expect.objectContaining({
+        type: "lifepilot-set-changed",
+        exerciseId: "bench",
+        setNumber: 1,
+        completed: true,
+      }),
+    ]);
+    posted.length = 0;
+
+    const entry = { id: "bench", sets: [{ w: 32, r: 8, done: false }] };
+    applyCanonicalExecutionSnapshot(
+      {
+        performed: [
+          {
+            exerciseId: "bench",
+            sets: [{ setNumber: 1, weightKg: 34, reps: 8, completed: true }],
+          },
+        ],
+        cursor: { phase: "rest", restEndsAt: "2026-10-03T10:02:30.000Z" },
+      },
+      {
+        update: (mut) => mut({ active: { entries: [entry] } }),
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(entry.sets[0].done).toBe(true);
+    expect(entry.sets[0].w).toBe(34);
+    expect(posted).toEqual([]);
+    expect(isApplyingRemoteSnapshot()).toBe(false);
   });
 });

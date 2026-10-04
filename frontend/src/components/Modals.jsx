@@ -1,47 +1,155 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useUI } from '../store/useUI.js'
+
+function activeScroller(panel) {
+  const body = panel?.querySelector(':scope > .sheet-body')
+  if (!body) return panel
+  if (getComputedStyle(body).overflowY === 'hidden') {
+    const list = body.querySelector(':scope > .list')
+    if (list) return list
+  }
+  return body
+}
+
+// Confirm dialogs wrap title, message and buttons in one div. List sheets
+// render those as direct children of the scroll body.
+function contentRoot(body) {
+  const kids = [...body.children]
+  if (kids.length === 1 && kids[0].tagName === 'DIV' && !kids[0].classList.contains('list')) return kids[0]
+  return body
+}
+
+function clearPins(body) {
+  body.querySelectorAll('[data-sheet-pin]').forEach(el => {
+    el.removeAttribute('data-sheet-pin')
+    el.style.removeProperty('--sheet-pin-bottom')
+  })
+  body.style.paddingBottom = ''
+  const root = contentRoot(body)
+  if (root !== body) root.style.paddingBottom = ''
+}
+
+function isSpacer(el) {
+  return el.tagName === 'DIV' && el.childElementCount === 0 && !el.textContent.trim()
+}
+
+function isAction(el) {
+  if (el.matches('button.btn, a.btn') || el.classList.contains('btn')) return true
+  if (!el.classList.contains('row')) return false
+  const kids = [...el.children]
+  return kids.length > 0 && kids.every(c => c.classList.contains('btn') || c.tagName === 'BUTTON')
+}
+
+function trailingActions(root) {
+  const kids = [...root.children]
+  const out = []
+  for (let i = kids.length - 1; i >= 0; i--) {
+    const el = kids[i]
+    if (isAction(el) || (out.length && isSpacer(el))) { out.unshift(el); continue }
+    break
+  }
+  return out.filter(isAction)
+}
+
+// Keep Save/Cancel/Done on screen when a form (no .list) is taller than the sheet.
+// Buttons stay in React's tree; only presentation changes. List sheets pin their
+// trailing actions with flex instead, so this bails out when a direct list exists.
+function layoutSheet(panel, body) {
+  clearPins(body)
+  const list = body.querySelector(':scope > .list')
+  if (list) return { mode: 'list', scroller: list }
+  const root = contentRoot(body)
+  const actions = trailingActions(root)
+  const overflows = body.scrollHeight > body.clientHeight + 1
+  if (!overflows || !actions.length) return { mode: overflows ? 'scroll' : 'fit', scroller: body, actions: actions.length }
+  const cs = getComputedStyle(panel)
+  const padB = parseFloat(cs.paddingBottom) || 0
+  panel.style.setProperty('--sheet-pin-left', (parseFloat(cs.paddingLeft) || 0) + 'px')
+  panel.style.setProperty('--sheet-pin-right', (parseFloat(cs.paddingRight) || 0) + 'px')
+  let stack = 0
+  for (let i = actions.length - 1; i >= 0; i--) {
+    const el = actions[i]
+    el.dataset.sheetPin = '1'
+    el.style.setProperty('--sheet-pin-bottom', (padB + stack) + 'px')
+    stack += el.getBoundingClientRect().height + 8
+  }
+  root.style.paddingBottom = stack + 'px'
+  return { mode: 'pin', scroller: body, actions: actions.length }
+}
 
 // One bottom sheet (or centered dialog) with swipe-to-dismiss.
 function Sheet({ sheet }) {
   const { closeSheet } = useUI()
   const ref = useRef(null)
+  const bodyRef = useRef(null)
   const drag = useRef({ startY: null, delta: 0 })
+  const lockedRef = useRef(sheet.locked)
+  lockedRef.current = sheet.locked
+  const moveRef = useRef(null)
 
   const onTouchStart = e => {
-    const el = ref.current
+    const panel = ref.current
+    if (!panel) return
     // a gesture that begins on a slider (or opted-out control) belongs to that control,
     // not to the sheet's swipe-to-dismiss — so it keeps working while you drag
     if (e.target.closest && e.target.closest('input[type=range], [data-nodrag]')) {
       drag.current = { startY: null, delta: 0 }
       return
     }
-    drag.current = { startY: el.scrollTop <= 0 ? e.touches[0].clientY : null, delta: 0 }
+    const scroller = activeScroller(panel)
+    drag.current = { startY: scroller && scroller.scrollTop <= 0 ? e.touches[0].clientY : null, delta: 0 }
   }
   const onTouchMove = e => {
-    const el = ref.current, d = drag.current
-    if (d.startY === null) return
+    const panel = ref.current, d = drag.current
+    if (!panel || d.startY === null) return
+    const scroller = activeScroller(panel)
     d.delta = e.touches[0].clientY - d.startY
-    if (d.delta > 0 && el.scrollTop <= 0) {
+    if (d.delta > 0 && scroller && scroller.scrollTop <= 0) {
       e.preventDefault()
-      el.style.transition = 'none'
-      el.style.transform = `translateY(${d.delta}px)`
+      panel.style.transition = 'none'
+      panel.style.transform = `translateY(${d.delta}px)`
     } else d.delta = 0
   }
+  moveRef.current = onTouchMove
   const onTouchEnd = () => {
-    const el = ref.current, d = drag.current
-    if (d.startY === null) return
-    el.style.transition = 'transform .2s'
-    if (d.delta > 90 && !sheet.locked) { el.style.transform = 'translateY(110%)'; setTimeout(() => closeSheet(sheet.id), 180) }
-    else el.style.transform = ''
+    const panel = ref.current, d = drag.current
+    if (!panel || d.startY === null) return
+    panel.style.transition = 'transform .2s'
+    if (d.delta > 90 && !lockedRef.current) { panel.style.transform = 'translateY(110%)'; setTimeout(() => closeSheet(sheet.id), 180) }
+    else panel.style.transform = ''
     d.startY = null
   }
 
   // non-passive touchmove so preventDefault works (bottom sheets only; centered dialogs have no ref)
   useEffect(() => {
     const el = ref.current
-    if (!el) return
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => el.removeEventListener('touchmove', onTouchMove)
+    if (!el || sheet.kind === 'center') return
+    const fn = e => moveRef.current(e)
+    el.addEventListener('touchmove', fn, { passive: false })
+    return () => el.removeEventListener('touchmove', fn)
+  }, [sheet.kind])
+
+  useLayoutEffect(() => {
+    const panel = ref.current
+    const body = bodyRef.current
+    if (!panel || !body) return
+    let mo = null
+    const run = () => {
+      if (mo) mo.disconnect()
+      layoutSheet(panel, body)
+      if (mo) mo.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] })
+    }
+    run()
+    mo = new MutationObserver(() => run())
+    mo.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] })
+    const onResize = () => run()
+    window.addEventListener('resize', onResize)
+    window.visualViewport?.addEventListener('resize', onResize)
+    return () => {
+      mo.disconnect()
+      window.removeEventListener('resize', onResize)
+      window.visualViewport?.removeEventListener('resize', onResize)
+    }
   }, [])
 
   const close = () => closeSheet(sheet.id)
@@ -49,7 +157,9 @@ function Sheet({ sheet }) {
     return (
       <div>
         <div className="mback" onClick={() => { if (!sheet.locked) close() }} />
-        <div className="center">{sheet.render(close)}</div>
+        <div className="center" ref={ref}>
+          <div className="sheet-body" ref={bodyRef}>{sheet.render(close)}</div>
+        </div>
       </div>
     )
   }
@@ -58,7 +168,7 @@ function Sheet({ sheet }) {
       <div className="mback" onClick={() => { if (!sheet.locked) close() }} />
       <div className="sheet" ref={ref} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div className="grab" />
-        {sheet.render(close)}
+        <div className="sheet-body" ref={bodyRef}>{sheet.render(close)}</div>
       </div>
     </div>
   )

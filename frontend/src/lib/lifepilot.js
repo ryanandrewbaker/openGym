@@ -9,6 +9,10 @@ import {
   notifyLpWorkoutFinished,
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
+  notifyLpSetChanged,
+  applyCanonicalExecutionSnapshot,
+  isApplyingRemoteSnapshot,
+  workSetNumber,
   requestLifePilotExit,
 } from './lifepilot-workout-bridge.js'
 
@@ -19,6 +23,10 @@ export {
   notifyLpWorkoutFinished,
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
+  notifyLpSetChanged,
+  applyCanonicalExecutionSnapshot,
+  isApplyingRemoteSnapshot,
+  workSetNumber,
   requestLifePilotExit,
 }
 

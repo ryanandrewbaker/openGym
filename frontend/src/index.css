@@ -653,22 +653,68 @@ h4.sec{
 .sheet{
   position:absolute;left:0;right:0;bottom:0;background:var(--bg-el);
   border-radius:var(--r-xl) var(--r-xl) 0 0;
-  padding:8px 18px calc(20px + var(--sab));
-  max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:8px 18px max(20px, env(safe-area-inset-bottom));
+  /* dvh tracks the visible viewport (mobile browser chrome). vh is the fallback. */
+  max-height:calc(100vh - 16px);
+  max-height:calc(100dvh - 16px);
+  display:flex;flex-direction:column;overflow:hidden;
   animation:sheetup .34s var(--ease);
   overscroll-behavior:contain;touch-action:pan-y;will-change:transform;
 }
 :root[data-theme="light"] .sheet{background:var(--bg)}
 @keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
+.sheet > .grab{flex:none}
 .sheet .grab{width:36px;height:5px;border-radius:99px;background:var(--label-4);margin:6px auto 14px}
-.sheet h3{font-size:20px;font-weight:600;letter-spacing:-.021em;margin-bottom:14px}
+.sheet h3,.center h3{font-size:20px;font-weight:600;letter-spacing:-.021em;margin-bottom:14px}
+/* The sheet is a column: grab stays put, and this region is the only vertical scroller
+   unless a direct .list takes that job. min-height:0 lets the flex item shrink below
+   its content height so the footer is not pushed past the viewport. */
+.sheet-body{
+  flex:1 1 auto;min-height:0;
+  overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;
+}
+.sheet-body > h3,
+.sheet-body > div > h3:first-child{
+  position:sticky;top:0;z-index:2;background:var(--bg-el);
+}
+:root[data-theme="light"] .sheet-body > h3,
+:root[data-theme="light"] .sheet-body > div > h3:first-child{background:var(--bg)}
+.sheet-body:has(> .list){
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sheet-body:has(> .list) > :not(.list){flex:none}
+.sheet-body:has(> .list) > .list{
+  flex:1 1 auto;min-height:0;
+  overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;
+}
+.sheet-body [data-sheet-pin]{
+  position:fixed;z-index:3;width:auto;margin:0;
+  left:var(--sheet-pin-left, 18px);right:var(--sheet-pin-right, 18px);
+  bottom:var(--sheet-pin-bottom, 20px);
+  box-shadow:0 -12px 0 var(--bg-el);
+}
+:root[data-theme="light"] .sheet-body [data-sheet-pin]{box-shadow:0 -12px 0 var(--bg)}
+.sheet-body [data-sheet-pin].ghost,
+.sheet-body [data-sheet-pin].plain{background:var(--bg-el)}
+:root[data-theme="light"] .sheet-body [data-sheet-pin].ghost,
+:root[data-theme="light"] .sheet-body [data-sheet-pin].plain{background:var(--bg)}
 .center{
   position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:min(84vw,300px);background:var(--bg-el);border-radius:var(--r-lg);padding:20px;
+  width:min(84vw,300px);background:var(--bg-el);border-radius:var(--r-lg);
+  padding:20px;padding-bottom:max(20px, env(safe-area-inset-bottom));
+  max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);
+  display:flex;flex-direction:column;overflow:hidden;
   box-shadow:0 20px 60px -12px rgba(0,0,0,.5);
   animation:pop .28s var(--ease);
 }
 :root[data-theme="light"] .center{background:#fff}
+:root[data-theme="light"] .center .sheet-body > h3,
+:root[data-theme="light"] .center .sheet-body > div > h3:first-child{background:#fff}
+:root[data-theme="light"] .center [data-sheet-pin]{box-shadow:0 -12px 0 #fff}
+:root[data-theme="light"] .center [data-sheet-pin].ghost,
+:root[data-theme="light"] .center [data-sheet-pin].plain{background:#fff}
 @keyframes pop{from{transform:translate(-50%,-50%) scale(.94);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
 
 /* --- RIR/RPE conversion table (effort help sheet) ---
@@ -1061,10 +1107,9 @@ body.lp-embed {
   bottom: calc(12px + var(--sab));
   transform: translateX(-50%);
   width: min(92vw, 360px);
-  max-height: min(88vh, calc(100% - 24px - var(--sab)));
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(16px + var(--sab));
+  max-height: min(90dvh, calc(100dvh - 24px - env(safe-area-inset-bottom)));
+  overflow: hidden;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
 }
 
 @media (min-width: 768px) {

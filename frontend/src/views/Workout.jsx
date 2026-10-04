@@ -15,7 +15,7 @@ import { Button, Check, NumberField } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
-import { isLpWorkoutMode, notifyLpWorkoutLeft, requestLifePilotExit } from '../lib/lifepilot.js'
+import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit } from '../lib/lifepilot.js'
 import { isStaleActiveWorkout, logWorkoutSession } from '../lib/active-workout-session.js'
 import { discardActiveWorkout, finishWorkoutAt } from '../sheets.jsx'
 
@@ -248,6 +248,21 @@ function ActiveWorkout() {
         if (e.sets.every(x => x.done)) { exJustDone = true; if (loaded && !e.asked) { e.asked = true; askTop = true } }
       }
     })
+    if (isLpWorkoutMode() && !isApplyingRemoteSnapshot()) {
+      const entry = useStore.getState().S.active?.entries?.[idx]
+      const set = entry?.sets?.[i]
+      if (entry && set && !set.warmup) {
+        notifyLpSetChanged({
+          exerciseId: String(entry.id),
+          setNumber: workSetNumber(entry, i),
+          loadKg: set.w ?? null,
+          reps: set.r ?? null,
+          completed: !!set.done,
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'opengym',
+        })
+      }
+    }
     // reps: topWeight first (it chains into the finish/continue prompt on the last unit).
     // cardio/timed or already-confirmed: go straight to the prompt.
     if (askTop) topWeightSheet(idx)
@@ -284,6 +299,23 @@ function ActiveWorkout() {
   }, [])
 
   const hosted = isLpWorkoutMode()
+  useEffect(() => {
+    if (!hosted) return undefined
+    const apply = (snapshot) => {
+      applyCanonicalExecutionSnapshot(snapshot, { update, startRest, stopRest })
+    }
+    window.applyLifePilotExecutionSnapshot = apply
+    const onMessage = (event) => {
+      if (event.data?.type === 'lifepilot-session-snapshot' && event.data.snapshot) {
+        apply(event.data.snapshot)
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => {
+      delete window.applyLifePilotExecutionSnapshot
+      window.removeEventListener('message', onMessage)
+    }
+  }, [hosted, update, startRest, stopRest])
   const endHostedWorkout = () => confirmSheet({
     title: t('End workout?'),
     message: t('Return to LifePilot. Your in-progress session stays saved until you finish or discard it.'),

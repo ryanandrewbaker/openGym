@@ -60,6 +60,71 @@ export function notifyLpWorkoutDiscarded(sessionId) {
   postLifePilotMessage(workoutDiscardedPayload(sessionId))
 }
 
+export function notifyLpSetChanged(change) {
+  if (!isLpWorkoutMode()) return
+  postLifePilotMessage({
+    type: 'lifepilot-set-changed',
+    ...change,
+  })
+}
+
+let applyingRemoteSnapshot = false
+
+export function isApplyingRemoteSnapshot() {
+  return applyingRemoteSnapshot
+}
+
+export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, stopRest }) {
+  if (!snapshot || typeof update !== 'function') return
+  applyingRemoteSnapshot = true
+  try {
+    update((state) => {
+      const active = state.active
+      if (!active?.entries) return
+      for (const performed of snapshot.performed || []) {
+        const entry = active.entries.find((item) => String(item.id) === String(performed.exerciseId))
+        if (!entry) continue
+        for (const set of performed.sets || []) {
+          if (set.warmup) continue
+          const row = workSetAt(entry, set.setNumber)
+          if (!row) continue
+          row.done = !!set.completed
+          if (set.weightKg != null) row.w = set.weightKg
+          if (set.reps != null) row.r = set.reps
+        }
+      }
+    }, false)
+    const restEndsAt = snapshot.cursor?.restEndsAt
+    if (snapshot.cursor?.phase === 'rest' && restEndsAt && typeof startRest === 'function') {
+      const remaining = Math.max(0, Math.ceil((Date.parse(restEndsAt) - Date.now()) / 1000))
+      if (remaining > 0) startRest(remaining)
+      else if (typeof stopRest === 'function') stopRest()
+    } else if (typeof stopRest === 'function' && snapshot.cursor?.phase !== 'rest') {
+      stopRest()
+    }
+  } finally {
+    applyingRemoteSnapshot = false
+  }
+}
+
+export function workSetNumber(entry, index) {
+  let number = 0
+  for (let i = 0; i <= index; i += 1) {
+    if (!entry.sets[i]?.warmup) number += 1
+  }
+  return number
+}
+
+function workSetAt(entry, setNumber) {
+  let number = 0
+  for (const set of entry.sets || []) {
+    if (set.warmup) continue
+    number += 1
+    if (number === setNumber) return set
+  }
+  return null
+}
+
 export function requestLifePilotExit() {
   postLifePilotMessage({ type: 'lifepilot-exit-workout' })
 }

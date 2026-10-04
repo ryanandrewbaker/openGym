@@ -199,6 +199,45 @@ test("routine endpoint returns planned exercises for a routine", async () => {
   assert.equal(lateral.loadsKg.includes(23), false);
 });
 
+test("routine endpoint uses the custom exercise name instead of its id", async () => {
+  const { call, dataDir } = makeHarness();
+
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-custom-name",
+    displayName: "Ryan",
+  });
+  const userId = provisioned.body.openGymUserId;
+  const customId = "cmusddpvgv7c8l";
+  const state = {
+    customEx: [
+      { id: customId, n: "single arm lat pulldown", bp: "back", desc: "", tg: "", eq: "custom", custom: true },
+    ],
+    routines: [
+      {
+        id: "custom-day",
+        name: "Sunday",
+        ex: [
+          { id: "0293", sets: 3, reps: 12 },
+          { id: customId, sets: 3, reps: 8, repsMin: 6 },
+        ],
+      },
+    ],
+  };
+  fs.writeFileSync(path.join(dataDir, `state-${userId}.json`), JSON.stringify(state));
+
+  const routine = await call("POST /integrations/lifepilot/routine", {
+    profileId: "profile-custom-name",
+    openGymUserId: userId,
+    routineId: "custom-day",
+  });
+
+  assert.equal(routine.status, 200);
+  const catalogue = routine.body.exercises.find((exercise) => exercise.exerciseId === "0293");
+  const custom = routine.body.exercises.find((exercise) => exercise.exerciseId === customId);
+  assert.equal(catalogue.exerciseName, "dumbbell bent over row");
+  assert.equal(custom.exerciseName, "single arm lat pulldown");
+});
+
 test("existing provisioned user keeps custom routines and schedule", async () => {
   const { call, db, dataDir } = makeHarness();
 

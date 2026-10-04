@@ -170,6 +170,14 @@ function catalogueEq(exerciseId) {
   return EXDB.find((entry) => entry.id === exerciseId)?.eq || "";
 }
 
+function exerciseDisplayName(state, exerciseId) {
+  const id = String(exerciseId ?? "");
+  const custom = (state?.customEx || []).find((entry) => String(entry.id) === id);
+  const customName = typeof custom?.n === "string" ? custom.n.trim() : "";
+  if (customName) return customName;
+  return openGymExerciseName(exerciseId);
+}
+
 function exerciseProgression(state, entry) {
   const unit = state?.unit === "lb" ? "lb" : "kg";
   const kit = equipmentForCatalogue(state, entry, catalogueEq(entry.id));
@@ -210,7 +218,7 @@ function routineDetailFromState(state, routineId) {
     name: routine.name,
     exercises: (routine.ex || []).map((entry) => ({
       exerciseId: String(entry.id),
-      exerciseName: openGymExerciseName(entry.id),
+      exerciseName: exerciseDisplayName(state, entry.id),
       sets: Number(entry.sets) || 0,
       reps: Number(entry.reps) || 0,
       repsMin: entry.repsMin != null ? Number(entry.repsMin) : null,
