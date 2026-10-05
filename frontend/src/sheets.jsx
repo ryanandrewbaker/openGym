@@ -749,7 +749,47 @@ function DayAssign({ day, close }) {
     </div>
   </>
 }
-export const dayAssignSheet = day => ui().openSheet(close => <DayAssign day={day} close={close} />)
+export const dayAssignSheet = day => {
+  // #region agent log
+  fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',hypothesisId:'B',location:'sheets.jsx:dayAssignSheet',message:'day assign sheet requested',data:{day},timestamp:Date.now()})}).catch(()=>{})
+  // #endregion
+  return ui().openSheet(close => <DayAssign day={day} close={close} />)
+}
+
+function RotationAssign({ index, close }) {
+  const st = useStore(s => s.S)
+  const key = String(index)
+  const current = st.rotation?.slots?.[key]
+  const anchor = st.rotation?.anchor
+  const d = anchor ? new Date(anchor + 'T12:00:00') : null
+  if (d) d.setDate(d.getDate() + index)
+  const title = d
+    ? t(DAYN[d.getDay()]) + (index === 0 ? ' · ' + t('week 1') : index === 7 ? ' · ' + t('week 2') : '')
+    : t('Rest day')
+  const set = v => {
+    update(s => {
+      if (!s.rotation) return
+      if (!s.rotation.slots) s.rotation.slots = {}
+      if (v) s.rotation.slots[key] = v
+      else delete s.rotation.slots[key]
+    })
+    // #region agent log
+    fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',runId:'post-fix',hypothesisId:'A',location:'sheets.jsx:RotationAssign',message:'rotation slot saved',data:{index,cleared:!v},timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
+    close()
+  }
+  return <>
+    <h3>{title}</h3>
+    <div className="list">
+      <div className="item" onClick={() => set('')}><span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="moon" /></span><div className="grow"><div className="tt">{t('Rest day')}</div></div>{!current && <Icon name="check" className="accent" />}</div>
+      {st.routines.map(r => <div key={r.id} className="item" onClick={() => set(r.id)}>
+        <span className="lrow-i"><Icon name={glyphOf(r.emoji)} /></span>
+        <div className="grow"><div className="tt">{r.name}</div><div className="ss">{exCount(r.ex.length)}</div></div>
+        {current === r.id && <Icon name="check" className="accent" />}</div>)}
+    </div>
+  </>
+}
+export const rotationAssignSheet = index => ui().openSheet(close => <RotationAssign index={index} close={close} />)
 
 /* ============================ workout detail ============================ */
 function WorkoutDetail({ w, close }) {

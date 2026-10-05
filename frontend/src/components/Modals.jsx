@@ -176,6 +176,11 @@ function Sheet({ sheet }) {
 
 export default function Modals() {
   const sheets = useUI(s => s.sheets)
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',hypothesisId:'D',location:'Modals.jsx:sheets',message:'modal sheet count',data:{sheetCount:sheets.length,kinds:sheets.map(s=>s.kind)},timestamp:Date.now()})}).catch(()=>{})
+  }, [sheets])
+  // #endregion
 
   // lock the page behind any open sheet (iOS-safe)
   useEffect(() => {

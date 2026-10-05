@@ -1,8 +1,9 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { DAYN, uid, exCount } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
-import { dayAssignSheet, loadStarterPlan, planToolsSheet } from '../sheets.jsx'
+import { dayAssignSheet, loadStarterPlan, planToolsSheet, rotationAssignSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
 import { glyphOf, DEFAULT_GLYPH } from '../lib/glyphs.js'
@@ -11,6 +12,12 @@ export default function Plan() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const update = useStore(s => s.update)
+  const rotationOn = !!(S.rotation?.anchor && S.rotation.length > 0)
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',hypothesisId:'A',location:'Plan.jsx:render',message:'plan schedule branch',data:{branch:rotationOn?'rotation':'week',length:S.rotation?.length??0,slotCount:Object.keys(S.rotation?.slots||{}).length,weekKeyCount:Object.keys(S.week||{}).length},timestamp:Date.now()})}).catch(()=>{})
+  }, [rotationOn, S.rotation, S.week])
+  // #endregion
 
   const addRoutine = () => {
     const r = { id: uid(), name: t('New routine'), emoji: DEFAULT_GLYPH, ex: [] }
@@ -33,10 +40,15 @@ export default function Plan() {
             d.setDate(d.getDate() + i)
             const id = S.rotation.slots?.[String(i)]
             const r = id ? S.routines.find(x => x.id === id) : null
-            return <div key={i} className="item">
+            return <div key={i} className="item" onClick={() => {
+              // #region agent log
+              fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',runId:'post-fix',hypothesisId:'A',location:'Plan.jsx:rotationClick',message:'rotation day click',data:{index:i,opensSheet:true},timestamp:Date.now()})}).catch(()=>{})
+              // #endregion
+              rotationAssignSheet(i)
+            }}>
               <div className="grow"><div className="tt">{t(DAYN[d.getDay()])}{i === 7 ? ' · ' + t('week 2') : i === 0 ? ' · ' + t('week 1') : ''}</div></div>
               {r ? <span className="tag acc"><Icon name={glyphOf(r.emoji)} />{r.name}</span> : <span className="tag">{t('Rest')}</span>}
-            </div>
+              <Icon name="chevronRight" className="chev" /></div>
           })}
         </div>
       </> : <>
@@ -44,7 +56,12 @@ export default function Plan() {
       <div className="list" style={{ display: 'flex', flexDirection: 'column' }}>
         {[1, 2, 3, 4, 5, 6, 0].map(d => {
           const r = S.routines.find(x => x.id === S.week[d])
-          return <div key={d} className="item" onClick={() => dayAssignSheet(d)}>
+          return <div key={d} className="item" onClick={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',hypothesisId:'B',location:'Plan.jsx:weekClick',message:'week day click',data:{day:d},timestamp:Date.now()})}).catch(()=>{})
+            // #endregion
+            dayAssignSheet(d)
+          }}>
             <div className="grow"><div className="tt">{t(DAYN[d])}</div></div>
             {r ? <span className="tag acc"><Icon name={glyphOf(r.emoji)} />{r.name}</span> : <span className="tag">{t('Rest')}</span>}
             <Icon name="chevronRight" className="chev" /></div>
