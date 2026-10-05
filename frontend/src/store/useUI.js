@@ -62,9 +62,6 @@ export const useUI = create((set, get) => ({
   openSheet(render, { kind = 'sheet', locked = false } = {}) {
     const id = uid()
     set(s => ({ sheets: [...s.sheets, { id, render, kind, locked }] }))
-    // #region agent log
-    fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',hypothesisId:'D',location:'useUI.js:openSheet',message:'sheet opened',data:{kind,sheetCount:get().sheets.length},timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
     const close = () => get().closeSheet(id)
     return { id, close, lock: v => set(s => ({ sheets: s.sheets.map(x => x.id === id ? { ...x, locked: v } : x) })) }
   },

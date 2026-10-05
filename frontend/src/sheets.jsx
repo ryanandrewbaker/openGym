@@ -749,12 +749,7 @@ function DayAssign({ day, close }) {
     </div>
   </>
 }
-export const dayAssignSheet = day => {
-  // #region agent log
-  fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',hypothesisId:'B',location:'sheets.jsx:dayAssignSheet',message:'day assign sheet requested',data:{day},timestamp:Date.now()})}).catch(()=>{})
-  // #endregion
-  return ui().openSheet(close => <DayAssign day={day} close={close} />)
-}
+export const dayAssignSheet = day => ui().openSheet(close => <DayAssign day={day} close={close} />)
 
 function RotationAssign({ index, close }) {
   const st = useStore(s => s.S)
@@ -773,9 +768,6 @@ function RotationAssign({ index, close }) {
       if (v) s.rotation.slots[key] = v
       else delete s.rotation.slots[key]
     })
-    // #region agent log
-    fetch('http://127.0.0.1:7575/ingest/9476189c-770c-4271-a33c-60163e3d6c7e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3bd55b'},body:JSON.stringify({sessionId:'3bd55b',runId:'post-fix',hypothesisId:'A',location:'sheets.jsx:RotationAssign',message:'rotation slot saved',data:{index,cleared:!v},timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
     close()
   }
   return <>
