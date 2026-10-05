@@ -51,13 +51,16 @@ function Shell() {
   const lpEmbedRequest = isLpEmbedRequest()
   useEffect(() => { setNav(navigate) }, [navigate])
   useEffect(() => {
-    if (lpEmbed) applyLifePilotEmbedChrome()
+    if (lpEmbedRequest) applyLifePilotEmbedChrome()
     else applyPrefs(S.theme, S.accent)
-  }, [S.theme, S.accent, lpEmbed])
+  }, [S.theme, S.accent, lpEmbedRequest])
   useEffect(() => { setLang(S.lang || 'en') }, [S.lang])
   useEffect(() => { document.documentElement.lang = S.lang || 'en' }, [langV, S.lang])
   // every tab/route change starts at the top of the page
-  useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    document.getElementById('app')?.scrollTo(0, 0)
+  }, [loc.pathname])
   // bound to the workout, not to the route — checking Stats mid-session keeps the screen on
   useWakeLock(!!S.active && S.keepAwake !== false)
 
@@ -127,7 +130,7 @@ function Shell() {
           )}
         </ErrorBoundary>
       </div>
-      {!lpEmbed && <TabBar onStart={startFlow} />}
+      {!lpEmbedRequest && <TabBar onStart={startFlow} />}
       <RestTimer />
       <Modals />
       <Toast />

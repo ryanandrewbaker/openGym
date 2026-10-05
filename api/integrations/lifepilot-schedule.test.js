@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applySeededRoutinesToState, routineMappingsFromState } from "./lifepilot-schedule.js";
+import { applySeededRoutinesToState, rotationFromState, routineMappingsFromState } from "./lifepilot-schedule.js";
 
 test("routineMappingsFromState derives mappings from state.week", () => {
   const mappings = routineMappingsFromState({
@@ -34,6 +34,33 @@ test("routineMappingsFromState omits removed weekday assignments", () => {
 
   assert.equal(mappings.length, 1);
   assert.equal(mappings[0]?.weekdayIndex, 1);
+});
+
+test("rotationFromState keeps named slots and drops unknown routines", () => {
+  const rotation = rotationFromState({
+    routines: [
+      { id: "a", name: "A · Benchmark" },
+      { id: "d", name: "D · Stability" },
+    ],
+    rotation: {
+      anchor: "2026-10-05",
+      length: 14,
+      slots: { 0: "a", 7: "d", 2: "missing", 99: "a" },
+    },
+  });
+
+  assert.deepEqual(rotation, {
+    anchor: "2026-10-05",
+    length: 14,
+    slots: {
+      0: { openGymRoutineId: "a", routineName: "A · Benchmark" },
+      7: { openGymRoutineId: "d", routineName: "D · Stability" },
+    },
+  });
+});
+
+test("rotationFromState is absent when the profile uses a weekly plan", () => {
+  assert.equal(rotationFromState({ routines: [], week: { 1: "a" } }), null);
 });
 
 test("applySeededRoutinesToState keeps routine IDs aligned across routines and week", () => {

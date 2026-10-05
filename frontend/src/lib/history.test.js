@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, freestyleConfig, exLine, workoutVolume, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep, cascadeWeight, insertWarmupRow, removeRowAt } from './history.js'
+import { modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, freestyleConfig, exLine, workoutVolume, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep, cascadeWeight, insertWarmupRow, removeRowAt, effectiveRoutineId, rotationCycleIndex } from './history.js'
 import { EXDB } from './exercises.js'
 
 // Real ids out of the shipped catalogue, so the body-part fallback is exercised for real.
@@ -527,5 +527,47 @@ describe('session row helpers', () => {
     const next = removeRowAt(rows, 0)
     expect(next.length).toBe(1)
     expect(next[0].w).toBe(70)
+  })
+})
+
+describe('14-day rotation', () => {
+  const rotation = {
+    anchor: '2026-10-05',
+    length: 14,
+    slots: { 0: 'a', 2: 'b', 4: 'c', 7: 'd', 9: 'e', 11: 'f' },
+  }
+  const S = {
+    routines: ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ({ id, name: id })),
+    week: { 1: 'a', 3: 'b', 5: 'c' },
+    dayPlan: {},
+    rotation,
+  }
+
+  it('walks the cycle from the anchor, including the next fortnight', () => {
+    expect(rotationCycleIndex(rotation, '2026-10-05')).toBe(0)
+    expect(rotationCycleIndex(rotation, '2026-10-12')).toBe(7)
+    expect(rotationCycleIndex(rotation, '2026-10-19')).toBe(0)
+    expect(rotationCycleIndex(rotation, '2026-10-04')).toBe(13)
+  })
+
+  it('picks the rotated routine and rests on the days in between', () => {
+    expect(effectiveRoutineId(S, '2026-10-05')).toBe('a')
+    expect(effectiveRoutineId(S, '2026-10-07')).toBe('b')
+    expect(effectiveRoutineId(S, '2026-10-09')).toBe('c')
+    expect(effectiveRoutineId(S, '2026-10-06')).toBe(null)
+    expect(effectiveRoutineId(S, '2026-10-12')).toBe('d')
+    expect(effectiveRoutineId(S, '2026-10-14')).toBe('e')
+    expect(effectiveRoutineId(S, '2026-10-16')).toBe('f')
+    expect(effectiveRoutineId(S, '2026-10-19')).toBe('a')
+  })
+
+  it('lets a one-off day plan beat the rotation', () => {
+    const moved = { ...S, dayPlan: { '2026-10-12': 'rest' } }
+    expect(effectiveRoutineId(moved, '2026-10-12')).toBe(null)
+  })
+
+  it('keeps the weekly plan when there is no rotation', () => {
+    const weekly = { ...S, rotation: undefined }
+    expect(effectiveRoutineId(weekly, '2026-10-05')).toBe('a')
   })
 })

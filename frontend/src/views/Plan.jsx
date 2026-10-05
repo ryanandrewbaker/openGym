@@ -24,6 +24,22 @@ export default function Plan() {
       <button className="iconbtn" onClick={planToolsSheet} aria-label={t('Share your plan')} title={t('Share your plan')}><Icon name="upload" /></button>
     </div>
     <div className="cols"><div>
+      {S.rotation?.anchor && S.rotation.length > 0 ? <>
+        <h4 className="sec">{t('14-day rotation')}</h4>
+        <div className="small dim" style={{ margin: '-4px 2px 10px' }}>{t('Repeats from {0}. A one-off change still lives on that date in the week strip.', S.rotation.anchor)}</div>
+        <div className="list" style={{ display: 'flex', flexDirection: 'column' }}>
+          {Array.from({ length: S.rotation.length }, (_, i) => {
+            const d = new Date(S.rotation.anchor + 'T12:00:00')
+            d.setDate(d.getDate() + i)
+            const id = S.rotation.slots?.[String(i)]
+            const r = id ? S.routines.find(x => x.id === id) : null
+            return <div key={i} className="item">
+              <div className="grow"><div className="tt">{t(DAYN[d.getDay()])}{i === 7 ? ' · ' + t('week 2') : i === 0 ? ' · ' + t('week 1') : ''}</div></div>
+              {r ? <span className="tag acc"><Icon name={glyphOf(r.emoji)} />{r.name}</span> : <span className="tag">{t('Rest')}</span>}
+            </div>
+          })}
+        </div>
+      </> : <>
       <h4 className="sec">{t('Week schedule')}</h4>
       <div className="list" style={{ display: 'flex', flexDirection: 'column' }}>
         {[1, 2, 3, 4, 5, 6, 0].map(d => {
@@ -34,6 +50,7 @@ export default function Plan() {
             <Icon name="chevronRight" className="chev" /></div>
         })}
       </div>
+      </>}
     </div><div>
       <div className="row between" style={{ marginTop: 22, marginBottom: 10 }}>
         <h4 className="sec" style={{ margin: 0 }}>{t('Routines')}</h4>

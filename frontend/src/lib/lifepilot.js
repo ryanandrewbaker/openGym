@@ -128,11 +128,11 @@ export function stashLifePilotEmbedParams() {
 export function applyLifePilotEmbedChrome() {
   const root = document.documentElement
   root.dataset.embed = 'lifepilot'
-  root.dataset.theme = 'light'
-  root.dataset.accent = 'sky'
+  delete root.dataset.theme
+  delete root.dataset.accent
   document.body.classList.add('lp-embed')
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.content = '#f5f8fc'
+  if (meta) meta.content = '#0B1E3A'
 }
 
 export function applyNativeEmbedBridge() {

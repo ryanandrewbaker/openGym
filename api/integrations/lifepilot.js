@@ -12,7 +12,7 @@ import {
 } from "../lib/equipment-core.js";
 import { createLifePilotCompletionRelay } from "./lifepilot-completion-relay.js";
 import { completionTiming } from "../lib/workout-duration.js";
-import { applySeededRoutinesToState, routineMappingsFromState } from "./lifepilot-schedule.js";
+import { applySeededRoutinesToState, rotationFromState, routineMappingsFromState } from "./lifepilot-schedule.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
 const SERVICE_SECRET = process.env.LIFEPILOT_OPENGYM_SERVICE_SECRET || process.env.OPENGYM_SERVICE_SECRET || "";
@@ -327,6 +327,7 @@ export function registerLifePilotRoutes(routes, deps) {
       json(res, 200, {
         openGymUserId: user.id,
         routines: routineMappingsFromState(state),
+        rotation: rotationFromState(state),
       });
       return;
     }
@@ -340,11 +341,16 @@ export function registerLifePilotRoutes(routes, deps) {
       json(res, 200, {
         openGymUserId: user.id,
         routines: routineMappingsFromState(state),
+        rotation: rotationFromState(state),
       });
       return;
     }
 
-    json(res, 200, { openGymUserId: user.id, routines: routineMappingsFromState(state) });
+    json(res, 200, {
+      openGymUserId: user.id,
+      routines: routineMappingsFromState(state),
+      rotation: rotationFromState(state),
+    });
   };
 
   routes["POST /integrations/lifepilot/routines"] = async (req, res) => {
@@ -363,7 +369,10 @@ export function registerLifePilotRoutes(routes, deps) {
     const state = readState(user.id);
     if (!state) return json(res, 404, { error: "state not found" });
 
-    json(res, 200, { routines: routineMappingsFromState(state) });
+    json(res, 200, {
+      routines: routineMappingsFromState(state),
+      rotation: rotationFromState(state),
+    });
   };
 
   routes["POST /integrations/lifepilot/routine"] = async (req, res) => {

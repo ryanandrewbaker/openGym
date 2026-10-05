@@ -980,43 +980,59 @@ h4.sec{
 }
 
 /* ---------------------------------------------------------------- LifePilot embed */
-:root[data-embed="lifepilot"] {
-  --bg: #f5f8fc;
-  --bg-el: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #eef3f9;
-  --surface-3: #d4e0ed;
-  --label: #1a2b42;
-  --label-2: #5a6d85;
-  --label-3: rgba(90, 109, 133, 0.55);
-  --label-4: rgba(90, 109, 133, 0.35);
-  --sep: #d4e0ed;
-  --sep-op: rgba(212, 224, 237, 0.85);
-  --acc: #0f356f;
-  --acc-2: #0c2a59;
+:root[data-embed="lifepilot"],
+:root[data-embed="lifepilot"][data-theme],
+:root[data-embed="lifepilot"][data-accent],
+:root[data-embed="lifepilot"][data-theme][data-accent] {
+  --bg: #0B1E3A;
+  --bg-el: #0F172A;
+  --surface: #1E293B;
+  --surface-2: #26364A;
+  --surface-3: #304258;
+  --label: #F8FAFC;
+  --label-2: #CBD5E1;
+  --label-3: #94A3B8;
+  --label-4: rgba(255, 255, 255, 0.18);
+  --sep: rgba(255, 255, 255, 0.10);
+  --sep-op: rgba(255, 255, 255, 0.10);
+  --acc: #2F8CFF;
+  --acc-2: #2474D8;
   --on-acc: #ffffff;
-  --acc-soft: color-mix(in srgb, var(--acc) 12%, transparent);
-  --acc-line: color-mix(in srgb, var(--acc) 28%, transparent);
+  --acc-soft: color-mix(in srgb, var(--acc) 15%, transparent);
+  --acc-line: color-mix(in srgb, var(--acc) 32%, transparent);
+  --r-sm: 14px;
+  --r: 16px;
+  --r-lg: 20px;
+  --r-card: 20px;
+  --pad: 16px;
 }
 
-html:has([data-embed="lifepilot"]),
+html[data-embed="lifepilot"],
 body.lp-embed {
   overflow: hidden;
   height: 100%;
   background: var(--bg);
 }
 
+html[data-embed="lifepilot"] #root {
+  height: 100%;
+}
+
 :root[data-embed="lifepilot"] #app,
 :root[data-embed="lifepilot"] #app.lp-embed-app {
   max-width: none;
   margin: 0;
-  padding: calc(var(--sat) + 4px) 12px calc(12px + var(--sab));
-  min-height: 100%;
+  padding: calc(var(--sat) + 8px) var(--pad) calc(var(--pad) + var(--sab));
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
 }
 
 :root[data-embed="lifepilot"] body.resting #app {
-  padding-bottom: calc(140px + var(--sab));
+  padding-bottom: calc(148px + var(--sab));
 }
 
 :root[data-embed="lifepilot"] #tabbar {
@@ -1027,20 +1043,67 @@ body.lp-embed {
   bottom: calc(12px + var(--sab));
 }
 
-/* Hosted workout: scrollable sets-first layout for iframe / mobile WebView shells */
-:root[data-embed="lifepilot"][data-lp-mode="workout"] #app,
-:root[data-embed="lifepilot"][data-lp-mode="workout"] #app.lp-embed-app {
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-top: calc(var(--sat) + 2px);
-  padding-bottom: calc(88px + var(--sab));
+:root[data-embed="lifepilot"] #toast {
+  bottom: calc(16px + var(--sab));
 }
 
-:root[data-embed="lifepilot"][data-lp-mode="workout"] body.resting #app {
-  padding-bottom: calc(148px + var(--sab));
+:root[data-embed="lifepilot"] .card,
+:root[data-embed="lifepilot"] .item,
+:root[data-embed="lifepilot"] .sect-b,
+:root[data-embed="lifepilot"] .ss-card {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+}
+
+:root[data-embed="lifepilot"] .item.in-ss {
+  box-shadow: inset 3px 0 0 var(--acc), inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+}
+
+:root[data-embed="lifepilot"] .btn {
+  min-height: 50px;
+  border-radius: var(--r);
+}
+
+:root[data-embed="lifepilot"] .btn.sm,
+:root[data-embed="lifepilot"] .btn.xs {
+  min-height: 0;
+}
+
+:root[data-embed="lifepilot"] .btn:not(.primary):not(.tinted):not(.ghost):not(.plain):not(.danger),
+:root[data-embed="lifepilot"] .btn.plain:not(.sm):not(.xs) {
+  background: var(--surface-2);
+  color: var(--label);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+:root[data-embed="lifepilot"] .field,
+:root[data-embed="lifepilot"] .input,
+:root[data-embed="lifepilot"] .stp,
+:root[data-embed="lifepilot"] .searchf .field,
+:root[data-embed="lifepilot"] .search .input {
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+:root[data-embed="lifepilot"] .field:focus,
+:root[data-embed="lifepilot"] .input:focus,
+:root[data-embed="lifepilot"] .searchf .field:focus,
+:root[data-embed="lifepilot"] .search .input:focus {
+  box-shadow: inset 0 0 0 2px var(--acc);
+}
+
+:root[data-embed="lifepilot"] .wprog,
+:root[data-embed="lifepilot"] #timer .bar {
+  height: 7px;
+  background: var(--surface-2);
+  border-radius: 99px;
+}
+
+:root[data-embed="lifepilot"] .wprog i,
+:root[data-embed="lifepilot"] #timer .bar i {
+  background: var(--acc);
+  border-radius: 99px;
 }
 
 :root[data-embed="lifepilot"][data-lp-mode="workout"] .exmedia {
@@ -1060,8 +1123,8 @@ body.lp-embed {
   align-items: center;
   gap: 8px;
   margin: 0 0 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--sep);
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 :root[data-embed="lifepilot"][data-lp-mode="workout"] .lp-hosted-exit {

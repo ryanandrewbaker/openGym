@@ -177,10 +177,46 @@ export function bestWeightFor(S, exId) {
   }))
   return best
 }
+// Calendar-day count from UTC, so a 14-day rotation does not slip across time zones.
+export function calendarDayNumber(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '')
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const utc = Date.UTC(year, month - 1, day)
+  if (Number.isNaN(utc)) return null
+  return Math.round(utc / 86400000)
+}
+
+export function rotationCycleIndex(rotation, iso) {
+  if (!rotation || typeof rotation.anchor !== 'string') return null
+  const length = Math.floor(Number(rotation.length))
+  if (!(length > 0)) return null
+  const anchor = calendarDayNumber(rotation.anchor)
+  const day = calendarDayNumber(iso)
+  if (anchor == null || day == null) return null
+  const delta = day - anchor
+  return ((delta % length) + length) % length
+}
+
+// undefined: this profile has no rotation, so the weekly plan still applies.
+// null: the rotation is active and this cycle day is a rest day.
+export function rotationRoutineId(S, iso) {
+  const index = rotationCycleIndex(S && S.rotation, iso)
+  if (index == null) return undefined
+  const id = S.rotation.slots && S.rotation.slots[String(index)]
+  if (id && (S.routines || []).some(r => r.id === id)) return id
+  return null
+}
+
 export function effectiveRoutineId(S, iso) {
   const ov = S.dayPlan[iso]
   if (ov === 'rest') return null
   if (ov && S.routines.some(r => r.id === ov)) return ov
+  const rotated = rotationRoutineId(S, iso)
+  if (rotated !== undefined) return rotated
   const wd = new Date(iso + 'T12:00:00').getDay()
   return S.week[wd] || null
 }
