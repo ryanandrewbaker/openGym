@@ -70,6 +70,14 @@ export function notifyLpSetChanged(change) {
 
 let applyingRemoteSnapshot = false
 
+export function notifyLpSelectionChanged(change) {
+  if (!isLpWorkoutMode() || applyingRemoteSnapshot) return
+  postLifePilotMessage({
+    type: 'lifepilot-selection-changed',
+    ...change,
+  })
+}
+
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
 }
@@ -91,6 +99,20 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
           row.done = !!set.completed
           if (set.weightKg != null) row.w = set.weightKg
           if (set.reps != null) row.r = set.reps
+        }
+      }
+      const plan = snapshot.plan || []
+      const exerciseIndex = snapshot.cursor?.exerciseIndex
+      const setIndex = snapshot.cursor?.setIndex
+      if (Number.isInteger(exerciseIndex) && Number.isInteger(setIndex)) {
+        const planExercise = plan[exerciseIndex]
+        const entry = planExercise
+          ? active.entries.find((item) => String(item.id) === String(planExercise.exerciseId))
+          : active.entries[exerciseIndex]
+        const row = entry ? workSetAt(entry, setIndex + 1) : null
+        if (row && !row.done) {
+          if (snapshot.cursor?.selectedLoadKg != null) row.w = snapshot.cursor.selectedLoadKg
+          if (snapshot.cursor?.selectedReps != null) row.r = snapshot.cursor.selectedReps
         }
       }
     }, false)

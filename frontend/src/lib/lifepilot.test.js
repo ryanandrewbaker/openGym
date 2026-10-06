@@ -5,6 +5,7 @@ import {
   emitFinishWorkoutBridge,
   isApplyingRemoteSnapshot,
   notifyLpSetChanged,
+  notifyLpSelectionChanged,
   notifyLpWorkoutFinished,
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
@@ -168,4 +169,70 @@ describe("LifePilot workout lifecycle bridge", () => {
     expect(posted).toEqual([]);
     expect(isApplyingRemoteSnapshot()).toBe(false);
   });
+
+  it("applies current selected load and reps without echoing a local change", () => {
+    stubLpContext({ mode: "workout", routineId: "r1", externalSessionId: "session-1" });
+    const posted = [];
+    const win = {
+      webkit: {
+        messageHandlers: {
+          lifepilot: { postMessage: (payload) => posted.push(payload) },
+        },
+      },
+    };
+    win.parent = win;
+    vi.stubGlobal("window", win);
+
+    const entry = { id: "bench", sets: [{ w: 34, r: 8, done: false }] };
+    applyCanonicalExecutionSnapshot(
+      {
+        plan: [{ exerciseId: "bench" }],
+        performed: [],
+        cursor: {
+          phase: "setReady",
+          exerciseIndex: 0,
+          setIndex: 0,
+          selectedLoadKg: 36,
+          selectedReps: 9,
+        },
+      },
+      {
+        update: (mut) => {
+          mut({ active: { entries: [entry] } });
+          notifyLpSelectionChanged({
+            exerciseId: "bench",
+            setNumber: 1,
+            loadKg: 36,
+            reps: 9,
+          });
+        },
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(entry.sets[0].w).toBe(36);
+    expect(entry.sets[0].r).toBe(9);
+    expect(entry.sets[0].done).toBe(false);
+    expect(posted).toEqual([]);
+
+    applyingFlagCheck();
+    notifyLpSelectionChanged({
+      exerciseId: "bench",
+      setNumber: 1,
+      loadKg: 38,
+      reps: 8,
+    });
+    expect(posted).toEqual([
+      expect.objectContaining({
+        type: "lifepilot-selection-changed",
+        exerciseId: "bench",
+        loadKg: 38,
+        reps: 8,
+      }),
+    ]);
+  });
 });
+
+function applyingFlagCheck() {
+  expect(isApplyingRemoteSnapshot()).toBe(false);
+}

@@ -15,7 +15,7 @@ import { Button, Check, NumberField } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
-import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit } from '../lib/lifepilot.js'
+import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, notifyLpSelectionChanged, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit } from '../lib/lifepilot.js'
 import { isStaleActiveWorkout, logWorkoutSession } from '../lib/active-workout-session.js'
 import { discardActiveWorkout, finishWorkoutAt } from '../sheets.jsx'
 
@@ -198,6 +198,17 @@ function ActiveWorkout() {
     // heavier bar carries through the set instead of retyping every row.
     if (field === 'w') {
       e.sets = cascadeWeight(e.sets, i, v)
+    }
+    if (isLpWorkoutMode() && !isApplyingRemoteSnapshot() && (field === 'w' || field === 'r')) {
+      const set = e.sets[i]
+      if (set && !set.warmup) {
+        notifyLpSelectionChanged({
+          exerciseId: String(e.id),
+          setNumber: workSetNumber(e, i),
+          loadKg: set.w ?? null,
+          reps: set.r ?? null,
+        })
+      }
     }
   })
   const modeAt = idx => modeOf({ ...(A.entries[idx].target || {}), id: A.entries[idx].id })
