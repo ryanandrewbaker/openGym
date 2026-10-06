@@ -320,3 +320,48 @@ test("routine loads omit 23 kg when stored equipment still has the old default",
   assert.equal(stored.workouts[0].entries[0].sets[0].w, 23);
   assert.equal(stored.equipment[0].loads.includes(23), true);
 });
+
+test("import-routine appends an unscheduled copy including skipped planned lifts", async () => {
+  const { call, dataDir } = makeHarness();
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-import",
+    displayName: "Ryan",
+  });
+  const userId = provisioned.body.openGymUserId;
+  const file = path.join(dataDir, `state-${userId}.json`);
+  const before = JSON.parse(fs.readFileSync(file, "utf8"));
+  const weekBefore = JSON.parse(JSON.stringify(before.week));
+  const routineCount = (before.routines || []).length;
+
+  const imported = await call("POST /integrations/lifepilot/import-routine", {
+    openGymUserId: userId,
+    name: "Copied from James - Chest + Triceps Saturday",
+    exercises: [
+      { exerciseId: "0025", name: "Dumbbell Bench Press", sets: 3, reps: 8, weightKg: 34 },
+      { exerciseId: "close-grip", name: "Close-Grip Dumbbell Press", sets: 3, reps: 10, weightKg: 22 },
+    ],
+  });
+
+  assert.equal(imported.status, 200);
+  assert.equal(imported.body.ok, true);
+  assert.equal(imported.body.name, "Copied from James - Chest + Triceps Saturday");
+  assert.ok(imported.body.routineId);
+
+  const after = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(after.week, weekBefore);
+  assert.equal((after.routines || []).length, routineCount + 1);
+  const routine = after.routines.find((entry) => entry.id === imported.body.routineId);
+  assert.ok(routine);
+  assert.equal(routine.name, "Copied from James - Chest + Triceps Saturday");
+  assert.equal(routine.ex[0].id, "0025");
+  assert.equal(routine.ex[0].sets, 3);
+  assert.equal(routine.ex[0].reps, 8);
+  assert.equal(routine.ex[0].weight, 34);
+  assert.notEqual(routine.ex[1].id, "close-grip");
+  assert.equal(routine.ex[1].sets, 3);
+  assert.equal(routine.ex[1].reps, 10);
+  assert.equal(routine.ex[1].weight, 22);
+  const custom = (after.customEx || []).find((entry) => entry.id === routine.ex[1].id);
+  assert.equal(custom.n, "Close-Grip Dumbbell Press");
+  assert.equal(Object.prototype.hasOwnProperty.call(after, "rotation"), false);
+});

@@ -64,6 +64,24 @@ function uid() {
   return crypto.randomBytes(9).toString("base64url");
 }
 
+function isCatalogueExercise(exerciseId) {
+  return Boolean(EXDB.find((entry) => entry.id === exerciseId));
+}
+
+function resolveImportedExerciseId(state, exerciseId, name) {
+  if (exerciseId && isCatalogueExercise(exerciseId)) return exerciseId;
+  const existingById = (state.customEx || []).find((entry) => String(entry.id) === String(exerciseId));
+  if (existingById) return existingById.id;
+  const displayName = String(name || exerciseId || "").trim();
+  const existingByName = (state.customEx || []).find(
+    (entry) => String(entry.n || "").trim().toLowerCase() === displayName.toLowerCase(),
+  );
+  if (existingByName) return existingByName.id;
+  const nid = uid();
+  state.customEx = [...(state.customEx || []), { id: nid, n: displayName || nid }];
+  return nid;
+}
+
 function verifyServiceAuth(req) {
   const header = req.headers.authorization || "";
   if (!header.startsWith("Bearer ")) return false;
@@ -517,6 +535,51 @@ export function registerLifePilotRoutes(routes, deps) {
     state._ts = Date.now();
     atomicWrite(stateFile(openGymUserId), JSON.stringify(state));
     json(res, 200, { ok: true });
+  };
+
+  routes["POST /integrations/lifepilot/import-routine"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    schedulePendingFlush(completionRelay);
+    const body = await readBody(req);
+    const openGymUserId = String(body.openGymUserId || "");
+    const name = String(body.name || "").trim();
+    const incoming = Array.isArray(body.exercises) ? body.exercises : [];
+    if (!openGymUserId || !name || incoming.length === 0) {
+      return json(res, 400, { error: "invalid import-routine payload" });
+    }
+
+    const state = readState(openGymUserId);
+    if (!state) return json(res, 404, { error: "state not found" });
+
+    const unit = state.unit === "lb" ? "lb" : "kg";
+    const mapped = [];
+    for (const entry of incoming) {
+      if (!entry || typeof entry !== "object") continue;
+      const exerciseId = String(entry.exerciseId || "").trim();
+      const exerciseName = String(entry.name || "").trim();
+      if (!exerciseId && !exerciseName) continue;
+      const resolvedId = resolveImportedExerciseId(state, exerciseId, exerciseName || exerciseId);
+      const sets = Number(entry.sets);
+      const mappedEntry = {
+        id: resolvedId,
+        sets: Number.isFinite(sets) && sets > 0 ? Math.trunc(sets) : 1,
+      };
+      const reps = entry.reps == null || entry.reps === "" ? null : Number(entry.reps);
+      if (reps != null && Number.isFinite(reps)) mappedEntry.reps = Math.trunc(reps);
+      const weightKg = entry.weightKg == null || entry.weightKg === "" ? null : Number(entry.weightKg);
+      const converted = convertLoad(weightKg, "kg", unit);
+      if (converted != null) mappedEntry.weight = converted;
+      mapped.push(mappedEntry);
+    }
+    if (mapped.length === 0) {
+      return json(res, 400, { error: "no importable exercises" });
+    }
+
+    const routineId = uid();
+    state.routines = [...(state.routines || []), { id: routineId, name, emoji: "clipboard", ex: mapped }];
+    state._ts = Date.now();
+    atomicWrite(stateFile(openGymUserId), JSON.stringify(state));
+    json(res, 200, { ok: true, routineId, name });
   };
 
   routes["POST /integrations/lifepilot/exercise-names"] = async (req, res) => {
