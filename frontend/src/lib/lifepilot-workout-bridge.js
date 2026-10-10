@@ -78,6 +78,11 @@ export function notifyLpSelectionChanged(change) {
   })
 }
 
+export function notifyLpExecutionReady() {
+  if (!isLpWorkoutMode()) return
+  postLifePilotMessage({ type: 'lifepilot-execution-ready' })
+}
+
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
 }
@@ -106,9 +111,11 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
       const setIndex = snapshot.cursor?.setIndex
       if (Number.isInteger(exerciseIndex) && Number.isInteger(setIndex)) {
         const planExercise = plan[exerciseIndex]
-        const entry = planExercise
-          ? active.entries.find((item) => String(item.id) === String(planExercise.exerciseId))
-          : active.entries[exerciseIndex]
+        const entryIndex = planExercise
+          ? active.entries.findIndex((item) => String(item.id) === String(planExercise.exerciseId))
+          : exerciseIndex
+        if (entryIndex >= 0) active.cur = entryIndex
+        const entry = entryIndex >= 0 ? active.entries[entryIndex] : null
         const row = entry ? workSetAt(entry, setIndex + 1) : null
         if (row && !row.done) {
           if (snapshot.cursor?.selectedLoadKg != null) row.w = snapshot.cursor.selectedLoadKg

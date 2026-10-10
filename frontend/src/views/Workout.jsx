@@ -15,7 +15,7 @@ import { Button, Check, NumberField } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
-import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, notifyLpSelectionChanged, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit } from '../lib/lifepilot.js'
+import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, notifyLpSelectionChanged, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit, notifyLpExecutionReady } from '../lib/lifepilot.js'
 import { isStaleActiveWorkout, logWorkoutSession } from '../lib/active-workout-session.js'
 import { discardActiveWorkout, finishWorkoutAt } from '../sheets.jsx'
 
@@ -316,6 +316,7 @@ function ActiveWorkout() {
       applyCanonicalExecutionSnapshot(snapshot, { update, startRest, stopRest })
     }
     window.applyLifePilotExecutionSnapshot = apply
+    notifyLpExecutionReady()
     const onMessage = (event) => {
       if (event.data?.type === 'lifepilot-session-snapshot' && event.data.snapshot) {
         apply(event.data.snapshot)

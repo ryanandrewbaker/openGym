@@ -15,6 +15,7 @@ import {
   isApplyingRemoteSnapshot,
   workSetNumber,
   requestLifePilotExit,
+  notifyLpExecutionReady,
 } from './lifepilot-workout-bridge.js'
 
 export {
@@ -30,6 +31,7 @@ export {
   isApplyingRemoteSnapshot,
   workSetNumber,
   requestLifePilotExit,
+  notifyLpExecutionReady,
 }
 
 const LP_CTX_KEY = 'lp_context'

@@ -4,6 +4,7 @@ import {
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
   isApplyingRemoteSnapshot,
+  notifyLpExecutionReady,
   notifyLpSetChanged,
   notifyLpSelectionChanged,
   notifyLpWorkoutFinished,
@@ -230,6 +231,55 @@ describe("LifePilot workout lifecycle bridge", () => {
         reps: 8,
       }),
     ]);
+  });
+
+  it("posts execution-ready and follows the watch exercise cursor", () => {
+    stubLpContext({ mode: "workout", routineId: "r1", externalSessionId: "session-1" });
+    const posted = [];
+    const win = {
+      webkit: {
+        messageHandlers: {
+          lifepilot: { postMessage: (payload) => posted.push(payload) },
+        },
+      },
+    };
+    win.parent = win;
+    vi.stubGlobal("window", win);
+
+    notifyLpExecutionReady();
+    expect(posted).toEqual([{ type: "lifepilot-execution-ready" }]);
+
+    const bench = { id: "bench", sets: [{ w: 34, r: 8, done: false }, { w: 34, r: 8, done: false }] };
+    const closeGrip = { id: "close-grip", sets: [{ w: 22, r: 10, done: false }] };
+    const state = { active: { entries: [bench, closeGrip], cur: 0 } };
+    applyCanonicalExecutionSnapshot(
+      {
+        plan: [{ exerciseId: "bench" }, { exerciseId: "close-grip" }],
+        performed: [
+          {
+            exerciseId: "bench",
+            sets: [
+              { setNumber: 1, weightKg: 34, reps: 8, completed: true },
+              { setNumber: 2, weightKg: 34, reps: 8, completed: true },
+            ],
+          },
+        ],
+        cursor: {
+          phase: "rest",
+          exerciseIndex: 1,
+          setIndex: 0,
+          restEndsAt: "2026-10-03T10:03:00.000Z",
+        },
+      },
+      {
+        update: (mut) => mut(state),
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(state.active.cur).toBe(1);
+    expect(bench.sets[0].done).toBe(true);
+    expect(bench.sets[1].done).toBe(true);
   });
 });
 
