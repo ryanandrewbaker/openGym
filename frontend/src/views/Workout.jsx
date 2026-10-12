@@ -148,7 +148,7 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
         return <div key={i}>
           {isFirstWarmup && <div className="setph">{t('Warm-up')}</div>}
           {!s.warmup && warmBefore && <div className="setsep" />}
-          <div className={'setrow' + (s.done ? ' done' : '') + (col3 ? ' eff3' : '')}>
+          <div className={'setrow' + (s.done ? ' done' : '') + (!s.done && i === entry.sets.findIndex(x => !x.done) ? ' current' : '') + (col3 ? ' eff3' : '')}>
             <div className="n">{phaseNum}</div>
             {cell(s, i, col1, 'w')}
             {col2 && cell(s, i, col2, 'r')}

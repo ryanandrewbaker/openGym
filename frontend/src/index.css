@@ -984,22 +984,22 @@ h4.sec{
 :root[data-embed="lifepilot"][data-theme],
 :root[data-embed="lifepilot"][data-accent],
 :root[data-embed="lifepilot"][data-theme][data-accent] {
-  --bg: #0B1E3A;
-  --bg-el: #0F172A;
-  --surface: #1E293B;
-  --surface-2: #26364A;
-  --surface-3: #304258;
+  --bg: #000000;
+  --bg-el: #111315;
+  --surface: #17191D;
+  --surface-2: #2A2C2F;
+  --surface-3: #1D304B;
   --label: #F8FAFC;
   --label-2: #CBD5E1;
   --label-3: #94A3B8;
   --label-4: rgba(255, 255, 255, 0.18);
   --sep: rgba(255, 255, 255, 0.10);
   --sep-op: rgba(255, 255, 255, 0.10);
-  --acc: #2F8CFF;
-  --acc-2: #2474D8;
+  --acc: #3B82F6;
+  --acc-2: #2563EB;
   --on-acc: #ffffff;
-  --acc-soft: color-mix(in srgb, var(--acc) 15%, transparent);
-  --acc-line: color-mix(in srgb, var(--acc) 32%, transparent);
+  --acc-soft: color-mix(in srgb, var(--acc) 16%, transparent);
+  --acc-line: color-mix(in srgb, var(--acc) 38%, transparent);
   --r-sm: 14px;
   --r: 16px;
   --r-lg: 20px;
@@ -1056,6 +1056,7 @@ html[data-embed="lifepilot"] #root {
 
 :root[data-embed="lifepilot"] .item.in-ss {
   box-shadow: inset 3px 0 0 var(--acc), inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+  background: var(--surface-3);
 }
 
 :root[data-embed="lifepilot"] .btn {
@@ -1154,6 +1155,23 @@ html[data-embed="lifepilot"] #root {
 :root[data-embed="lifepilot"][data-lp-mode="workout"] .lp-hosted-hdr .sub {
   font-size: 13px;
   margin-top: 2px;
+}
+
+:root[data-embed="lifepilot"] .wday .dot.done,
+:root[data-embed="lifepilot"] .cal-d i.done,
+:root[data-embed="lifepilot"] .setrow.done .n {
+  background: var(--green);
+  color: #000000;
+}
+
+:root[data-embed="lifepilot"] .setrow.current {
+  background: color-mix(in srgb, var(--acc) 12%, transparent);
+  border-radius: 12px;
+}
+
+:root[data-embed="lifepilot"] .setrow.current .n {
+  background: var(--acc);
+  color: var(--on-acc);
 }
 
 :root[data-embed="lifepilot"][data-lp-mode="workout"] .setrow {

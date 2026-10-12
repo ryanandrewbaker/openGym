@@ -136,7 +136,7 @@ export function applyLifePilotEmbedChrome() {
   delete root.dataset.accent
   document.body.classList.add('lp-embed')
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.content = '#0B1E3A'
+  if (meta) meta.content = '#000000'
 }
 
 export function applyNativeEmbedBridge() {

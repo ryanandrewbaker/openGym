@@ -69,7 +69,7 @@ describe("LifePilot embed chrome", () => {
     expect(root().hasAttribute("data-theme")).toBe(false);
     expect(root().hasAttribute("data-accent")).toBe(false);
     expect(document.body.classList.contains("lp-embed")).toBe(true);
-    expect(document.querySelector('meta[name="theme-color"]').content).toBe("#0B1E3A");
+    expect(document.querySelector('meta[name="theme-color"]').content).toBe("#000000");
     expect(sessionStorage.getItem("gym_state_v1")).toBe(null);
     expect(sessionStorage.getItem("lp_embed_request")).toBe("1");
   });
