@@ -12,7 +12,14 @@ import {
 } from "../lib/equipment-core.js";
 import { createLifePilotCompletionRelay } from "./lifepilot-completion-relay.js";
 import { completionTiming } from "../lib/workout-duration.js";
-import { applySeededRoutinesToState, rotationFromState, routineMappingsFromState } from "./lifepilot-schedule.js";
+import {
+  applyLifePilotScheduleToState,
+  applySeededRoutinesToState,
+  catalogueFromState,
+  rotationFromState,
+  routineMappingsFromState,
+  scheduleWriteConflicts,
+} from "./lifepilot-schedule.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
 const SERVICE_SECRET = process.env.LIFEPILOT_OPENGYM_SERVICE_SECRET || process.env.OPENGYM_SERVICE_SECRET || "";
@@ -390,6 +397,48 @@ export function registerLifePilotRoutes(routes, deps) {
     json(res, 200, {
       routines: routineMappingsFromState(state),
       rotation: rotationFromState(state),
+      catalogue: catalogueFromState(state),
+      updatedAt: typeof state._ts === "number" ? state._ts : null,
+    });
+  };
+
+  routes["POST /integrations/lifepilot/schedule"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    const body = await readBody(req);
+    const openGymUserId = String(body.openGymUserId || "");
+    const profileId = String(body.profileId || "");
+    if (!openGymUserId || !profileId) {
+      return json(res, 400, { error: "openGymUserId and profileId required" });
+    }
+
+    const user = db.users.find((u) => u.id === openGymUserId && u.lifepilotProfileId === profileId);
+    if (!user) return json(res, 404, { error: "user not found" });
+
+    const state = readState(user.id);
+    if (!state) return json(res, 404, { error: "state not found" });
+
+    if (scheduleWriteConflicts(state, body.baseUpdatedAt, body.force === true)) {
+      return json(res, 409, {
+        error: "schedule_conflict",
+        updatedAt: state._ts,
+        routines: routineMappingsFromState(state),
+        rotation: rotationFromState(state),
+        catalogue: catalogueFromState(state),
+      });
+    }
+
+    applyLifePilotScheduleToState(state, {
+      routines: Array.isArray(body.routines) ? body.routines : [],
+      rotation: body.rotation === undefined ? rotationFromState(state) : body.rotation,
+    });
+    atomicWrite(stateFile(user.id), JSON.stringify(state));
+
+    json(res, 200, {
+      ok: true,
+      updatedAt: state._ts,
+      routines: routineMappingsFromState(state),
+      rotation: rotationFromState(state),
+      catalogue: catalogueFromState(state),
     });
   };
 

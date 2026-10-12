@@ -365,3 +365,46 @@ test("import-routine appends an unscheduled copy including skipped planned lifts
   assert.equal(custom.n, "Close-Grip Dumbbell Press");
   assert.equal(Object.prototype.hasOwnProperty.call(after, "rotation"), false);
 });
+
+test("schedule write stores a 14-day rotation and conflicts on a stale snapshot", async () => {
+  const { call, dataDir } = makeHarness();
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-schedule-write",
+    displayName: "Ryan",
+  });
+  const userId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+  const file = path.join(dataDir, `state-${userId}.json`);
+  const before = JSON.parse(fs.readFileSync(file, "utf8"));
+  before._ts = 1_000;
+  fs.writeFileSync(file, JSON.stringify(before));
+
+  const conflict = await call("POST /integrations/lifepilot/schedule", {
+    profileId: "profile-schedule-write",
+    openGymUserId: userId,
+    routines: provisioned.body.routines,
+    rotation: {
+      anchor: "2026-10-05",
+      length: 14,
+      slots: { 0: { openGymRoutineId: routineId } },
+    },
+    baseUpdatedAt: 500,
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.error, "schedule_conflict");
+
+  const written = await call("POST /integrations/lifepilot/schedule", {
+    profileId: "profile-schedule-write",
+    openGymUserId: userId,
+    routines: provisioned.body.routines,
+    rotation: {
+      anchor: "2026-10-05",
+      length: 14,
+      slots: { 0: { openGymRoutineId: routineId } },
+    },
+    baseUpdatedAt: 1_000,
+  });
+  assert.equal(written.status, 200);
+  assert.equal(written.body.rotation.anchor, "2026-10-05");
+  assert.equal(written.body.rotation.slots["0"].openGymRoutineId, routineId);
+});

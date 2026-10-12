@@ -49,3 +49,61 @@ export function applySeededRoutinesToState(state, seeded) {
   state.week = Object.fromEntries(seeded.map((item) => [String(item.weekdayIndex), item.openGymRoutineId]));
   return state;
 }
+
+export function catalogueFromState(state) {
+  return (state?.routines || []).map((routine) => ({
+    openGymRoutineId: String(routine.id),
+    routineName: routine.name,
+  }));
+}
+
+function slotRoutineId(value) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value && typeof value === "object" && typeof value.openGymRoutineId === "string") {
+    return value.openGymRoutineId.trim();
+  }
+  return "";
+}
+
+/** True when OpenGym's state is newer than the snapshot LifePilot last read. */
+export function scheduleWriteConflicts(state, baseUpdatedAt, force) {
+  if (force) return false;
+  if (typeof baseUpdatedAt !== "number" || !Number.isFinite(baseUpdatedAt)) return false;
+  return typeof state?._ts === "number" && state._ts > baseUpdatedAt;
+}
+
+export function applyLifePilotScheduleToState(state, input) {
+  const knownIds = new Set((state?.routines || []).map((routine) => String(routine.id)));
+  const week = {};
+  for (const row of input.routines || []) {
+    const weekdayIndex = Number(row.weekdayIndex);
+    const routineId = String(row.openGymRoutineId || "");
+    if (!Number.isInteger(weekdayIndex) || weekdayIndex < 0 || weekdayIndex > 6) continue;
+    if (!knownIds.has(routineId)) continue;
+    week[String(weekdayIndex)] = routineId;
+  }
+  state.week = week;
+
+  if (input.rotation == null) {
+    delete state.rotation;
+  } else {
+    const length = Math.floor(Number(input.rotation.length));
+    const anchor = typeof input.rotation.anchor === "string" ? input.rotation.anchor : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(anchor) && length > 0) {
+      const slots = {};
+      for (const [key, value] of Object.entries(input.rotation.slots || {})) {
+        const index = Number(key);
+        if (!Number.isInteger(index) || index < 0 || index >= length) continue;
+        const routineId = slotRoutineId(value);
+        if (!knownIds.has(routineId)) continue;
+        slots[String(index)] = routineId;
+      }
+      state.rotation = { anchor, length, slots };
+    } else {
+      delete state.rotation;
+    }
+  }
+
+  state._ts = Date.now();
+  return state;
+}

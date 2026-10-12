@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applySeededRoutinesToState, rotationFromState, routineMappingsFromState } from "./lifepilot-schedule.js";
+import {
+  applyLifePilotScheduleToState,
+  applySeededRoutinesToState,
+  catalogueFromState,
+  rotationFromState,
+  routineMappingsFromState,
+  scheduleWriteConflicts,
+} from "./lifepilot-schedule.js";
 
 test("routineMappingsFromState derives mappings from state.week", () => {
   const mappings = routineMappingsFromState({
@@ -84,4 +91,43 @@ test("applySeededRoutinesToState keeps routine IDs aligned across routines and w
   assert.equal(state.week["1"], "abc");
   assert.equal(state.week["3"], "def");
   assert.deepEqual(routineMappingsFromState(state).map((row) => row.openGymRoutineId), ["abc", "def"]);
+});
+
+test("applyLifePilotScheduleToState writes rotation slots as routine ids", () => {
+  const state = {
+    routines: [
+      { id: "a", name: "Push" },
+      { id: "b", name: "Pull" },
+    ],
+    week: { 1: "a" },
+    _ts: 1,
+  };
+  applyLifePilotScheduleToState(state, {
+    routines: [{ weekdayIndex: 1, openGymRoutineId: "a" }],
+    rotation: {
+      anchor: "2026-10-05",
+      length: 14,
+      slots: { 0: { openGymRoutineId: "a" }, 7: { openGymRoutineId: "b" } },
+    },
+  });
+  assert.equal(state.week["1"], "a");
+  assert.deepEqual(state.rotation, {
+    anchor: "2026-10-05",
+    length: 14,
+    slots: { 0: "a", 7: "b" },
+  });
+  assert.ok(state._ts > 1);
+});
+
+test("scheduleWriteConflicts when OpenGym is newer than the LifePilot snapshot", () => {
+  assert.equal(scheduleWriteConflicts({ _ts: 5 }, 3, false), true);
+  assert.equal(scheduleWriteConflicts({ _ts: 5 }, 3, true), false);
+  assert.equal(scheduleWriteConflicts({ _ts: 5 }, 5, false), false);
+});
+
+test("catalogueFromState lists routines by id", () => {
+  assert.deepEqual(
+    catalogueFromState({ routines: [{ id: "a", name: "Push" }] }),
+    [{ openGymRoutineId: "a", routineName: "Push" }],
+  );
 });
