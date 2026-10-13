@@ -22,7 +22,7 @@ import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLIC
 import { buildWorkoutEntries } from './lib/lifepilot-prescription.js'
 import { equipmentForExercise } from './lib/equipment.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
-import { isLpMode, isLpWorkoutMode, notifyLpCompletion, emitBeginWorkoutBridge, emitFinishWorkoutBridge, notifyLpWorkoutDiscarded, requestLifePilotExit, getLpContext } from './lib/lifepilot.js'
+import { isLpMode, isLpWorkoutMode, notifyLpCompletion, notifyLpExerciseSelected, emitBeginWorkoutBridge, emitFinishWorkoutBridge, notifyLpWorkoutDiscarded, requestLifePilotExit, getLpContext } from './lib/lifepilot.js'
 import { durationSecondsFor, logWorkoutSession } from './lib/active-workout-session.js'
 
 const S = () => useStore.getState().S
@@ -932,7 +932,12 @@ function TopWeight({ entryIdx, close }) {
     close()
     if (advance && unitDone) {
       if (isLastUnit) workoutCompleteSheet()               // whole workout done → finish/continue prompt
-      else update(s => { s.active.cur = units[unitIdx + 1][0] })
+      else {
+        const nextIdx = units[unitIdx + 1][0]
+        update(s => { s.active.cur = nextIdx })
+        const exerciseId = S().active?.entries?.[nextIdx]?.id
+        if (exerciseId != null) notifyLpExerciseSelected(exerciseId)
+      }
     } else toast(t('Tracked — next time starts at {0}', fmtNum(S().exWeights[entry.id].w) + ' ' + st.unit))
   }
   return <>

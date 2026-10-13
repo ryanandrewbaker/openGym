@@ -16,6 +16,7 @@ import {
   workSetNumber,
   requestLifePilotExit,
   notifyLpExecutionReady,
+  notifyLpExerciseSelected,
 } from './lifepilot-workout-bridge.js'
 
 export {
@@ -32,6 +33,7 @@ export {
   workSetNumber,
   requestLifePilotExit,
   notifyLpExecutionReady,
+  notifyLpExerciseSelected,
 }
 
 const LP_CTX_KEY = 'lp_context'

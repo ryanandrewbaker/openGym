@@ -281,6 +281,35 @@ describe("LifePilot workout lifecycle bridge", () => {
     expect(bench.sets[0].done).toBe(true);
     expect(bench.sets[1].done).toBe(true);
   });
+
+  it("keeps the open exercise when a later set is logged and the canonical cursor is still on the first exercise", () => {
+    const bench = { id: "bench", sets: [{ w: 34, r: 8, done: true }, { w: 34, r: 8, done: false }] };
+    const row = { id: "row", sets: [{ w: 22, r: 10, done: true }, { w: 22, r: 10, done: false }] };
+    const state = { active: { entries: [bench, row], cur: 0 } };
+    const apply = (snapshot) => applyCanonicalExecutionSnapshot(snapshot, {
+      update: (mut) => mut(state),
+      startRest: () => {},
+      stopRest: () => {},
+    });
+    apply({
+      sessionId: "session-rewind",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [],
+      cursor: { phase: "setReady", exerciseIndex: 0, setIndex: 0 },
+    });
+    expect(state.active.cur).toBe(0);
+    state.active.cur = 1;
+    apply({
+      sessionId: "session-rewind",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [
+        { exerciseId: "row", sets: [{ setNumber: 2, weightKg: 22, reps: 10, completed: true }] },
+      ],
+      cursor: { phase: "setReady", exerciseIndex: 0, setIndex: 1 },
+    });
+    expect(state.active.cur).toBe(1);
+    expect(row.sets[1].done).toBe(true);
+  });
 });
 
 function applyingFlagCheck() {

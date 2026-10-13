@@ -15,7 +15,7 @@ import { Button, Check, NumberField } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
-import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, notifyLpSelectionChanged, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit, notifyLpExecutionReady } from '../lib/lifepilot.js'
+import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, notifyLpSelectionChanged, notifyLpExerciseSelected, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit, notifyLpExecutionReady } from '../lib/lifepilot.js'
 import { isStaleActiveWorkout, logWorkoutSession } from '../lib/active-workout-session.js'
 import { discardActiveWorkout, finishWorkoutAt } from '../sheets.jsx'
 
@@ -190,6 +190,11 @@ function ActiveWorkout() {
   const done = setsDoneActive(A)
 
   const mutEntry = (idx, fn) => update(s => { fn(s.active.entries[idx]) }, true)
+  const showExercise = (entryIndex) => {
+    update(s => { s.active.cur = entryIndex })
+    const exerciseId = A.entries[entryIndex]?.id
+    if (exerciseId != null) notifyLpExerciseSelected(exerciseId)
+  }
   // Clearing an optional field drops the key rather than storing null, so a set only carries
   // what was actually logged — in the session, in history and in a backup.
   const setField = (idx, i, field, v) => mutEntry(idx, e => {
@@ -376,8 +381,8 @@ function ActiveWorkout() {
 
     <div style={{ height: 12 }} />
     <div className="row">
-      <Button icon="chevronLeft" disabled={unitIdx <= 0} onClick={() => update(s => { s.active.cur = units[unitIdx - 1][0] })}>{t('Prev')}</Button>
-      <Button trailingIcon="chevronRight" disabled={unitIdx < 0 || unitIdx >= units.length - 1} onClick={() => update(s => { s.active.cur = units[unitIdx + 1][0] })}>{t('Next')}</Button>
+      <Button icon="chevronLeft" disabled={unitIdx <= 0} onClick={() => showExercise(units[unitIdx - 1][0])}>{t('Prev')}</Button>
+      <Button trailingIcon="chevronRight" disabled={unitIdx < 0 || unitIdx >= units.length - 1} onClick={() => showExercise(units[unitIdx + 1][0])}>{t('Next')}</Button>
     </div>
     <div style={{ height: 10 }} />
     <Button onClick={() => exercisePicker(ex => {

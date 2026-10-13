@@ -83,6 +83,16 @@ export function notifyLpExecutionReady() {
   postLifePilotMessage({ type: 'lifepilot-execution-ready' })
 }
 
+export function notifyLpExerciseSelected(exerciseId) {
+  if (!isLpWorkoutMode() || !exerciseId) return
+  postLifePilotMessage({
+    type: 'lifepilot-exercise-selected',
+    exerciseId: String(exerciseId),
+  })
+}
+
+let lastPaintedCursor = null
+
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
 }
@@ -114,7 +124,12 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
         const entryIndex = planExercise
           ? active.entries.findIndex((item) => String(item.id) === String(planExercise.exerciseId))
           : exerciseIndex
-        if (entryIndex >= 0) active.cur = entryIndex
+        const sessionId = String(snapshot.sessionId || snapshot.externalSessionId || '')
+        const cursorMoved = !lastPaintedCursor
+          || lastPaintedCursor.sessionId !== sessionId
+          || lastPaintedCursor.exerciseIndex !== exerciseIndex
+        if (entryIndex >= 0 && cursorMoved) active.cur = entryIndex
+        lastPaintedCursor = { sessionId, exerciseIndex }
         const entry = entryIndex >= 0 ? active.entries[entryIndex] : null
         const row = entry ? workSetAt(entry, setIndex + 1) : null
         if (row && !row.done) {
