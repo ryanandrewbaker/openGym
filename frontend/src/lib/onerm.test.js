@@ -135,10 +135,9 @@ describe('is1RMRecord', () => {
     expect(is1RMRecord(S, 'bench', { id: 'bench', sets: [{ w: 80, r: 5, done: true }] })).toBeNull()
   })
 
-  it('counts the first ever estimate as a record', () => {
+  it('treats the first ever estimate as a baseline', () => {
     const rec = is1RMRecord(S, 'deadlift', { id: 'deadlift', sets: [{ w: 140, r: 3, done: true }] })
-    expect(rec.prev).toBe(0)
-    expect(rec.est).toBe(154)
+    expect(rec).toBeNull()
   })
 
   it('says nothing for a timed or unfinished entry', () => {

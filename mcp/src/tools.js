@@ -13,6 +13,7 @@ import { EXIDX, exOr } from '../../frontend/src/lib/exercises.js'
 import {
   estimate1RM, best1RM, e1rmSeries, DEFAULT_FORMULA, REP_CAP
 } from '../../frontend/src/lib/onerm.js'
+import { pbEligibleWorkouts } from '../../frontend/src/lib/pb.js'
 import { loadOfWorkouts, rankOf, levelsOf } from '../../frontend/src/lib/muscles.js'
 import { nextPrescription } from '../../frontend/src/lib/progression.js'
 import { convertLoad } from '../../frontend/src/lib/equipment.js'
@@ -47,10 +48,10 @@ function entryView(e, S) {
 // Best estimate per exercise, mirroring the UI's PR table: every eligible set across history, biggest wins.
 function prTable(S, formula) {
   const byId = new Map()
-  for (const w of (S.workouts || [])) {
+  for (const w of pbEligibleWorkouts(S)) {
     for (const e of (w.entries || [])) {
       for (const s of (e.sets || [])) {
-        if (!s.done) continue
+        if (!s.done || s.warmup) continue
         const est = estimate1RM(s.w, s.r, formula)
         if (est == null) continue
         const ex = exOr(e.id)

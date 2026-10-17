@@ -6,6 +6,7 @@ import { isCardio, isBodyweightEq } from './exercises.js'
 // for the hook — and it re-exports this very `t` from core, so nothing changes here except what
 // gets dragged along behind it.
 import { t } from './i18n-core.js'
+import { bestTopLoad } from './pb.js'
 
 // How an exercise is logged (issue #16). This used to be derived from the body part alone,
 // which meant a plank or a farmer's carry could only be timed by filing it under cardio.
@@ -168,14 +169,7 @@ export function freestyleConfig(S, cfg) {
   }
 }
 export function bestWeightFor(S, exId) {
-  let best = 0
-  S.workouts.forEach(w => w.entries.forEach(e => {
-    if (e.id === exId) {
-      e.sets.forEach(s => { if (s.done && s.w > best) best = s.w })
-      if (e.topW && e.topW > best) best = e.topW
-    }
-  }))
-  return best
+  return bestTopLoad(S, exId) || 0
 }
 // Calendar-day count from UTC, so a 14-day rotation does not slip across time zones.
 export function calendarDayNumber(iso) {

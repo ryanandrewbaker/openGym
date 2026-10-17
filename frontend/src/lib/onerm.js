@@ -1,3 +1,5 @@
+import { classifyPerformance, pbEligibleWorkouts } from './pb.js'
+
 // Estimated one-rep max (issue #18).
 //
 // Deliberately knows nothing about the exercise database: an estimate needs a weight AND a
@@ -56,19 +58,26 @@ export function bestSetOf(entry, formula = DEFAULT_FORMULA) {
 export function e1rmSeries(S, exId, formula = DEFAULT_FORMULA) {
   const pts = []
   ;(S.workouts || []).forEach(w => {
-    const entry = w.entries.find(e => e.id === exId)
-    if (!entry) return
-    const best = bestSetOf(entry, formula)
+    let best = null
+    for (const entry of w.entries || []) {
+      if (entry.id !== exId) continue
+      const candidate = bestSetOf(entry, formula)
+      if (candidate && (!best || candidate.est > best.est)) best = candidate
+    }
     if (best) pts.push({ t: w.start, d: w.d, y: best.est, w: best.w, r: best.r })
   })
   return pts
 }
 
-// All-time best estimate for an exercise, with the set and date it came from — the source
+export function currentE1rmSeries(S, exId, formula = DEFAULT_FORMULA) {
+  return e1rmSeries({ workouts: pbEligibleWorkouts(S) }, exId, formula)
+}
+
+// Current baseline-window best estimate for an exercise, with the set and date it came from — the source
 // matters, because "142.5 kg est. from 100×10" is a very different claim from "from 140×1".
 export function best1RM(S, exId, formula = DEFAULT_FORMULA) {
   let best = null
-  e1rmSeries(S, exId, formula).forEach(p => { if (!best || p.y > best.est) best = { est: p.y, w: p.w, r: p.r, d: p.d, t: p.t } })
+  currentE1rmSeries(S, exId, formula).forEach(p => { if (!best || p.y > best.est) best = { est: p.y, w: p.w, r: p.r, d: p.d, t: p.t } })
   return best
 }
 
@@ -78,5 +87,5 @@ export function is1RMRecord(S, exId, entry, formula = DEFAULT_FORMULA) {
   const now = bestSetOf(entry, formula)
   if (!now) return null
   const prev = best1RM(S, exId, formula)
-  return !prev || now.est > prev.est ? { ...now, prev: prev ? prev.est : 0 } : null
+  return classifyPerformance(now.est, prev?.est) === 'improved' ? { ...now, prev: prev.est } : null
 }

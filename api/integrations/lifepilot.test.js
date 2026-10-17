@@ -85,6 +85,34 @@ test("manage-session token exchanges without workout fields", async () => {
   assert.equal(exchanged.body.context.wellnessOccurrenceId, null);
 });
 
+test("PB reset is service authenticated, profile scoped, persisted and retry safe", async () => {
+  const { call, dataDir } = makeHarness();
+  const a = await call("POST /integrations/lifepilot/provision", { profileId: "profile-a", displayName: "A" });
+  const b = await call("POST /integrations/lifepilot/provision", { profileId: "profile-b", displayName: "B" });
+  const aFile = path.join(dataDir, `state-${a.body.openGymUserId}.json`);
+  const bFile = path.join(dataDir, `state-${b.body.openGymUserId}.json`);
+  const originalA = JSON.parse(fs.readFileSync(aFile, "utf8"));
+  const originalB = fs.readFileSync(bFile, "utf8");
+  const resetAt = new Date(Date.now() - 1000).toISOString();
+  const identity = { profileId: "profile-a", openGymUserId: a.body.openGymUserId };
+  const status = await call("POST /integrations/lifepilot/pb-reset/status", identity);
+  assert.equal(status.body.pbResetAt, null);
+  assert.equal((await call("POST /integrations/lifepilot/pb-reset", { ...identity, resetId: "op-1", resetAt, expectedStateTs: status.body.stateTs }, { auth: false })).status, 401);
+  assert.equal((await call("POST /integrations/lifepilot/pb-reset", { profileId: "profile-b", openGymUserId: a.body.openGymUserId, resetId: "op-1", resetAt, expectedStateTs: status.body.stateTs })).status, 404);
+  const applied = await call("POST /integrations/lifepilot/pb-reset", { ...identity, resetId: "op-1", resetAt, expectedStateTs: status.body.stateTs });
+  assert.equal(applied.status, 200);
+  assert.equal(applied.body.pbResetAt, resetAt);
+  const retry = await call("POST /integrations/lifepilot/pb-reset", { ...identity, resetId: "op-1", resetAt, expectedStateTs: status.body.stateTs });
+  assert.equal(retry.body.unchanged, true);
+  const storedA = JSON.parse(fs.readFileSync(aFile, "utf8"));
+  assert.deepEqual(storedA.workouts, originalA.workouts);
+  assert.deepEqual(storedA.routines, originalA.routines);
+  assert.equal(fs.readFileSync(bFile, "utf8"), originalB);
+  const rolled = await call("POST /integrations/lifepilot/pb-reset/rollback", { ...identity, resetId: "op-1", expectedResetAt: resetAt });
+  assert.equal(rolled.status, 200);
+  assert.equal(rolled.body.pbResetAt, null);
+});
+
 test("workout session token includes mode workout and requires session context", async () => {
   const { call } = makeHarness();
 

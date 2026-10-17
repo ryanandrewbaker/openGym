@@ -12,6 +12,7 @@ import {
 } from "../lib/equipment-core.js";
 import { createLifePilotCompletionRelay } from "./lifepilot-completion-relay.js";
 import { completionTiming } from "../lib/workout-duration.js";
+import { applyPbReset, pbResetStatus, rollbackPbReset } from "../lib/pb-reset.js";
 import {
   applyLifePilotScheduleToState,
   applySeededRoutinesToState,
@@ -322,6 +323,43 @@ export function registerLifePilotRoutes(routes, deps) {
     }
     return out.length > 0 ? out : undefined;
   }
+
+  function pbResetUser(body) {
+    const profileId = String(body?.profileId || '').trim();
+    const openGymUserId = String(body?.openGymUserId || '').trim();
+    if (!profileId || !openGymUserId) return null;
+    return db.users.find(user => user.id === openGymUserId && user.lifepilotProfileId === profileId) || null;
+  }
+
+  routes["POST /integrations/lifepilot/pb-reset/status"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    const body = await readBody(req);
+    const user = pbResetUser(body);
+    if (!user) return json(res, 404, { error: "profile_not_found" });
+    return json(res, 200, pbResetStatus(readState(user.id)));
+  };
+
+  routes["POST /integrations/lifepilot/pb-reset"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    const body = await readBody(req);
+    const user = pbResetUser(body);
+    if (!user) return json(res, 404, { error: "profile_not_found" });
+    const result = applyPbReset(readState(user.id), body);
+    if (result.error) return json(res, result.status, { error: result.error });
+    if (!result.unchanged) atomicWrite(stateFile(user.id), JSON.stringify(result.state));
+    return json(res, 200, { ...pbResetStatus(result.state), unchanged: result.unchanged });
+  };
+
+  routes["POST /integrations/lifepilot/pb-reset/rollback"] = async (req, res) => {
+    if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
+    const body = await readBody(req);
+    const user = pbResetUser(body);
+    if (!user) return json(res, 404, { error: "profile_not_found" });
+    const result = rollbackPbReset(readState(user.id), body);
+    if (result.error) return json(res, result.status, { error: result.error });
+    atomicWrite(stateFile(user.id), JSON.stringify(result.state));
+    return json(res, 200, pbResetStatus(result.state));
+  };
 
   routes["POST /integrations/lifepilot/provision"] = async (req, res) => {
     if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
