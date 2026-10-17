@@ -111,6 +111,12 @@ test("PB reset is service authenticated, profile scoped, persisted and retry saf
   const rolled = await call("POST /integrations/lifepilot/pb-reset/rollback", { ...identity, resetId: "op-1", expectedResetAt: resetAt });
   assert.equal(rolled.status, 200);
   assert.equal(rolled.body.pbResetAt, null);
+  assert.deepEqual(rolled.body.lastRollback, { id: "op-1", at: resetAt, previousAt: null });
+  const afterRollback = fs.readFileSync(aFile, "utf8");
+  const rollbackRetry = await call("POST /integrations/lifepilot/pb-reset/rollback", { ...identity, resetId: "op-1", expectedResetAt: resetAt });
+  assert.equal(rollbackRetry.status, 200);
+  assert.equal(rollbackRetry.body.unchanged, true);
+  assert.equal(fs.readFileSync(aFile, "utf8"), afterRollback);
 });
 
 test("workout session token includes mode workout and requires session context", async () => {

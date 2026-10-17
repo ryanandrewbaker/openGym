@@ -1,8 +1,15 @@
 export function pbResetStatus(state) {
+  const last = state?.pbResetAudit?.at(-1)
+  const latestWorkoutEnd = (state?.workouts || []).reduce((latest, w) => Number.isFinite(w.end) ? Math.max(latest, w.end) : latest, 0)
   return {
     pbResetAt: state?.pbResetAt || null,
     resetId: state?.pbResetOperation?.id || null,
     stateTs: Number(state?._ts) || 0,
+    activeWorkout: Boolean(state?.active),
+    latestWorkoutEnd: latestWorkoutEnd || null,
+    lastRollback: !state?.pbResetOperation && last?.action === 'rollback'
+      ? { id: last.id, at: last.at, previousAt: last.previousAt || null }
+      : null,
   }
 }
 
@@ -36,6 +43,10 @@ export function applyPbReset(state, { resetId, resetAt, expectedStateTs }, now =
 
 export function rollbackPbReset(state, { resetId, expectedResetAt }, now = Date.now()) {
   if (!state || typeof state !== 'object') return { error: 'state_not_found', status: 404 }
+  const last = state.pbResetAudit?.at(-1)
+  if (!state.pbResetOperation && last?.action === 'rollback' && last.id === resetId && last.at === expectedResetAt && state.pbResetAt === (last.previousAt || null)) {
+    return { state, unchanged: true }
+  }
   const operation = state.pbResetOperation
   if (!operation || operation.id !== resetId || state.pbResetAt !== expectedResetAt) {
     return { error: 'reset_conflict', status: 409 }
@@ -48,8 +59,8 @@ export function rollbackPbReset(state, { resetId, expectedResetAt }, now = Date.
     ...state,
     pbResetAt: operation.previousAt || null,
     pbResetOperation: null,
-    pbResetAudit: [...(state.pbResetAudit || []), { action: 'rollback', id: resetId, at: expectedResetAt, recordedAt: new Date(now).toISOString() }],
+    pbResetAudit: [...(state.pbResetAudit || []), { action: 'rollback', id: resetId, at: expectedResetAt, previousAt: operation.previousAt || null, recordedAt: new Date(now).toISOString() }],
     _ts: Math.max(now, Number(state._ts || 0) + 1),
   }
-  return { state: next }
+  return { state: next, unchanged: false }
 }

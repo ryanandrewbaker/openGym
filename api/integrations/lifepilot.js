@@ -357,8 +357,8 @@ export function registerLifePilotRoutes(routes, deps) {
     if (!user) return json(res, 404, { error: "profile_not_found" });
     const result = rollbackPbReset(readState(user.id), body);
     if (result.error) return json(res, result.status, { error: result.error });
-    atomicWrite(stateFile(user.id), JSON.stringify(result.state));
-    return json(res, 200, pbResetStatus(result.state));
+    if (!result.unchanged) atomicWrite(stateFile(user.id), JSON.stringify(result.state));
+    return json(res, 200, { ...pbResetStatus(result.state), unchanged: result.unchanged });
   };
 
   routes["POST /integrations/lifepilot/provision"] = async (req, res) => {

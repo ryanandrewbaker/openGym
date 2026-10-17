@@ -21,6 +21,9 @@ test('reset preserves workout and working-load data, and retry is idempotent', (
   const rolled = rollbackPbReset(first.state, { resetId: 'op-1', expectedResetAt: resetAt }, at + 1)
   assert.equal(rolled.state.pbResetAt, null)
   assert.deepEqual(rolled.state.workouts, before.workouts)
+  const rollbackRetry = rollbackPbReset(rolled.state, { resetId: 'op-1', expectedResetAt: resetAt }, at + 2)
+  assert.equal(rollbackRetry.unchanged, true)
+  assert.deepEqual(rollbackRetry.state.pbResetAudit, rolled.state.pbResetAudit)
   assert.equal(applyPbReset(rolled.state, { resetId: 'op-1', resetAt, expectedStateTs: rolled.state._ts }, at + 2).error, 'reset_id_reused')
 })
 
@@ -31,4 +34,16 @@ test('rejects concurrent activity, noncompleted records, stale state and wrong r
   const applied = applyPbReset(base(), { resetId: 'op', resetAt, expectedStateTs: base()._ts }, at)
   assert.equal(rollbackPbReset(applied.state, { resetId: 'someone-else', expectedResetAt: resetAt }, at).error, 'reset_conflict')
   assert.equal(rollbackPbReset({ ...applied.state, workouts: [...applied.state.workouts, { start: at + 1, end: at + 10 }] }, { resetId: 'op', expectedResetAt: resetAt }, at + 20).error, 'post_reset_training_exists')
+})
+
+test('rollback restores an earlier reset marker without touching historical workouts', () => {
+  const previousAt = new Date(at - 10_000).toISOString()
+  const before = { ...base(), pbResetAt: previousAt, pbResetAudit: [{ action: 'apply', id: 'old-op', at: previousAt }] }
+  const applied = applyPbReset(before, { resetId: 'op-2', resetAt, expectedStateTs: before._ts }, at)
+  const rolled = rollbackPbReset(applied.state, { resetId: 'op-2', expectedResetAt: resetAt }, at + 1)
+  assert.equal(rolled.state.pbResetAt, previousAt)
+  assert.deepEqual(rolled.state.workouts, before.workouts)
+  assert.deepEqual(rolled.state.pbResetAudit.at(-1), {
+    action: 'rollback', id: 'op-2', at: resetAt, previousAt, recordedAt: new Date(at + 1).toISOString(),
+  })
 })
