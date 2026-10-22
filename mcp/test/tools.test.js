@@ -12,10 +12,9 @@ import { TOOLS } from '../src/tools.js'
 // the demo state's exact values.
 const FAKE_TODAY_ISO = '2026-07-27'                         // Monday — Push Day is scheduled
 const GOAL_WEIGHT = 77
-// Re-pinned against the v1.2.4 seed, which moved when the demo learned about bodyweight work
-// and effort. Hand-checked rather than copied off a failing run: 18412.5 is the sum of w×r
-// over the twenty completed sets, and 1.3 is 78.3 − 77.
-const NEWEST_WORKOUT = { date: '2026-07-24', name: 'Leg Day', volume: 18412.5, bw: 78.4, sets_done: 20, sets_total: 20, duration: '1h 11m' }
+// Re-pinned against the demo seed at FAKE_TODAY_ISO. Hand-checked: 6328.75 is w×r over the
+// nineteen completed Push Day sets on the pinned Monday; 1.3 is 78.3 − 77.
+const NEWEST_WORKOUT = { date: '2026-07-27', name: 'Push Day', volume: 6328.75, bw: 78.3, sets_done: 19, sets_total: 19, duration: '49 min' }
 const LATEST_BW = { date: '2026-07-27', weight: 78.3, delta: 1.3 }
 const LEG_PRESS_ID = '0739'                                 // sled 45° leg press in the demo data
 const LEG_PRESS_BEST = { w: 152.5, r: 12, epley: 213.5, brzycki: 219.6 }
@@ -203,7 +202,7 @@ describe('list_workouts', () => {
     // newest-first check
     const dates = r.workouts.map(w => w.date)
     expect([...dates].sort().reverse()).toEqual(dates)
-    // The newest workout is the Friday before the pinned Monday today.
+    // The newest workout is the Push Day session on the pinned Monday.
     expect(r.workouts[0].date).toBe(NEWEST_WORKOUT.date)
     expect(r.workouts[0].routine_name).toBe(NEWEST_WORKOUT.name)
     expect(r.workouts[0].volume).toBe(NEWEST_WORKOUT.volume)

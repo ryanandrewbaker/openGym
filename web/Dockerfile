@@ -3,10 +3,10 @@
 #
 # Plain FROM (no --platform=$BUILDPLATFORM) so Vision/Unraid legacy builder works.
 # UAT builds on the host arch; static output is arch-independent.
-FROM node:22-alpine AS build
+FROM node:24.22.1-alpine AS build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci 2>/dev/null || npm install
+RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 

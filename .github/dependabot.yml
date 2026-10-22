@@ -58,7 +58,7 @@ updates:
         patterns: ['*']
         update-types: ['major']
 
-  # Base images — api/Dockerfile (node:22-alpine)
+  # Base images — api/Dockerfile (node:24.22.1-alpine)
   - package-ecosystem: docker
     directory: /api
     schedule:
@@ -72,7 +72,7 @@ updates:
       - dependency-name: node
         versions: ['25.x', '27.x', '29.x', '31.x', '33.x']
 
-  # Base images — web/Dockerfile (node:22-alpine build stage + nginx:alpine)
+  # Base images — web/Dockerfile (node:24.22.1-alpine build stage + nginx:alpine)
   - package-ecosystem: docker
     directory: /web
     schedule:
