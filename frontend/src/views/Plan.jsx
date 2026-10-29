@@ -2,15 +2,18 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { DAYN, uid, exCount } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
+import { isLpManageMode } from '../lib/lifepilot.js'
 import { dayAssignSheet, loadStarterPlan, planToolsSheet, rotationAssignSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
 import { glyphOf, DEFAULT_GLYPH } from '../lib/glyphs.js'
+import { planPresentation } from './planPresentation.js'
 
 export default function Plan() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const update = useStore(s => s.update)
+  const pres = planPresentation(isLpManageMode())
 
   const addRoutine = () => {
     const r = { id: uid(), name: t('New routine'), emoji: DEFAULT_GLYPH, ex: [] }
@@ -20,10 +23,13 @@ export default function Plan() {
 
   return <>
     <div className="hdr">
-      <div><h1>{t('Plan')}</h1><div className="sub">{t('Your weekly routine')}</div></div>
-      <button className="iconbtn" onClick={planToolsSheet} aria-label={t('Share your plan')} title={t('Share your plan')}><Icon name="upload" /></button>
+      <div><h1>{t(pres.titleKey)}</h1><div className="sub">{t(pres.subtitleKey)}</div></div>
+      {pres.showSharePlan ? (
+        <button className="iconbtn" onClick={planToolsSheet} aria-label={t('Share your plan')} title={t('Share your plan')}><Icon name="upload" /></button>
+      ) : null}
     </div>
-    <div className="cols"><div>
+    <div className={pres.showScheduling ? 'cols' : ''}>
+      {pres.showScheduling ? <div>
       {S.rotation?.anchor && S.rotation.length > 0 ? <>
         <h4 className="sec">{t('14-day rotation')}</h4>
         <div className="small dim" style={{ margin: '-4px 2px 10px' }}>{t('Repeats from {0}. A one-off change still lives on that date in the week strip.', S.rotation.anchor)}</div>
@@ -51,7 +57,8 @@ export default function Plan() {
         })}
       </div>
       </>}
-    </div><div>
+      </div> : null}
+    <div>
       <div className="row between" style={{ marginTop: 22, marginBottom: 10 }}>
         <h4 className="sec" style={{ margin: 0 }}>{t('Routines')}</h4>
         <Button size="sm" variant="tinted" icon="plus" onClick={addRoutine}>{t('New')}</Button>
