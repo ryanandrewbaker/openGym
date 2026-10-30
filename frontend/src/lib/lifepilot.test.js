@@ -310,6 +310,68 @@ describe("LifePilot workout lifecycle bridge", () => {
     expect(state.active.cur).toBe(1);
     expect(row.sets[1].done).toBe(true);
   });
+
+  it("does not replace a locally initialised set with a one-rep snapshot", () => {
+    const curl = { id: "curl", sets: [{ w: 12, r: 10, done: false }, { w: 12, r: 10, done: false }] };
+    const state = { active: { entries: [curl], cur: 0 } };
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "adhoc-one-rep",
+        plan: [{ exerciseId: "curl", loadKg: null, repsMin: 1, repsMax: 1 }],
+        performed: [
+          { exerciseId: "curl", sets: [{ setNumber: 1, weightKg: null, reps: 1, completed: false }] },
+        ],
+        cursor: {
+          phase: "setReady",
+          exerciseIndex: 0,
+          setIndex: 0,
+          selectedLoadKg: null,
+          selectedReps: 1,
+        },
+      },
+      {
+        update: (mut) => mut(state),
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(curl.sets[0]).toMatchObject({ w: 12, r: 10, done: false });
+    expect(curl.sets[1]).toMatchObject({ w: 12, r: 10, done: false });
+  });
+
+  it("keeps a completed set and an explicit selection when the snapshot reconnects", () => {
+    const curl = {
+      id: "curl",
+      sets: [
+        { w: 12, r: 10, done: true },
+        { w: 14, r: 11, done: false },
+      ],
+    };
+    const state = { active: { entries: [curl], cur: 0 } };
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "adhoc-reconnect",
+        plan: [{ exerciseId: "curl", loadKg: 12, repsMin: 8, repsMax: 12 }],
+        performed: [
+          { exerciseId: "curl", sets: [{ setNumber: 1, weightKg: 12, reps: 10, completed: true }] },
+        ],
+        cursor: {
+          phase: "setReady",
+          exerciseIndex: 0,
+          setIndex: 1,
+          selectedLoadKg: 14,
+          selectedReps: 11,
+        },
+      },
+      {
+        update: (mut) => mut(state),
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(curl.sets[0]).toMatchObject({ w: 12, r: 10, done: true });
+    expect(curl.sets[1]).toMatchObject({ w: 14, r: 11, done: false });
+  });
 });
 
 function applyingFlagCheck() {

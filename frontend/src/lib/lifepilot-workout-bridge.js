@@ -111,6 +111,13 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
           if (set.warmup) continue
           const row = workSetAt(entry, set.setNumber)
           if (!row) continue
+          if (
+            !set.completed
+            && isFabricatedOneRepTarget(set.reps, set.weightKg)
+            && rowHasOrdinaryTarget(row)
+          ) {
+            continue
+          }
           row.done = !!set.completed
           if (set.weightKg != null) row.w = set.weightKg
           if (set.reps != null) row.r = set.reps
@@ -133,8 +140,7 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
         const entry = entryIndex >= 0 ? active.entries[entryIndex] : null
         const row = entry ? workSetAt(entry, setIndex + 1) : null
         if (row && !row.done) {
-          if (snapshot.cursor?.selectedLoadKg != null) row.w = snapshot.cursor.selectedLoadKg
-          if (snapshot.cursor?.selectedReps != null) row.r = snapshot.cursor.selectedReps
+          applyCursorSelection(row, snapshot.cursor, planExercise)
         }
       }
     }, false)
@@ -157,6 +163,35 @@ export function workSetNumber(entry, index) {
     if (!entry.sets[i]?.warmup) number += 1
   }
   return number
+}
+
+function isFabricatedOneRepTarget(reps, loadKg) {
+  return Number(reps) === 1 && (loadKg == null || loadKg === '')
+}
+
+function rowHasOrdinaryTarget(row) {
+  const reps = Number(row?.r)
+  const weight = Number(row?.w)
+  return (Number.isFinite(reps) && reps > 1) || (Number.isFinite(weight) && weight > 0)
+}
+
+function planExerciseIsFabricated(exercise) {
+  if (!exercise) return true
+  return Number(exercise.repsMin) === 1
+    && Number(exercise.repsMax) === 1
+    && (exercise.loadKg == null || exercise.loadKg === '')
+}
+
+function applyCursorSelection(row, cursor, planExercise) {
+  const fabricated = isFabricatedOneRepTarget(cursor?.selectedReps, cursor?.selectedLoadKg)
+  if (fabricated && rowHasOrdinaryTarget(row)) return
+  if (fabricated && planExercise && !planExerciseIsFabricated(planExercise)) {
+    if (planExercise.loadKg != null) row.w = planExercise.loadKg
+    if (planExercise.repsMin != null) row.r = planExercise.repsMin
+    return
+  }
+  if (cursor?.selectedLoadKg != null) row.w = cursor.selectedLoadKg
+  if (cursor?.selectedReps != null) row.r = cursor.selectedReps
 }
 
 function workSetAt(entry, setNumber) {
