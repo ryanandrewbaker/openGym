@@ -35,12 +35,14 @@ For each issue record each repository as affected / unaffected with reason / unv
 
 ## Completion gate
 
-- Work proceeds In Progress -> Review and Test -> Done. Re-read current DoD at final review.
+**Jira status mapping:** The board column **Done** contains the actual Jira workflow status **Resolved** (status ID `5`, Done category). All Definition of Done requirements apply **before transitioning to Resolved**. Do not add or look for a separate status named Done.
+
+- Work proceeds In Progress -> Review and Test -> **Resolved** (board column: Done). Re-read current DoD at final review.
 - Verification must describe exact commands/checks and real outcomes. Distinguish passed, failed, blocked, not run and N/A with reasons. Do not claim a physical device, HealthKit, GPS, WatchConnectivity or manual UI test was performed unless it actually was.
 - Require independent fresh-context review for substantive changes; a self-review alone is not proof. Resolve blocking findings and verify the final changed code.
 - Maintain canonical feature documents' distinction between **approved intent** and **verified implementation**; sync affected repository-specific documentation. Do not change unrelated documentation.
 - Record test evidence, independent review, affected repo matrix, PR/commit references, documentation updates and remaining risks on the *existing* Jira issue.
-- Recommend Done only if applicable DoD items are evidenced and user approval is obtained for closure. Do not make the Done transition on an agent's unsupported assertion.
+- Recommend transitioning to **Resolved** only if applicable DoD items are evidenced and user approval is obtained for closure. Do not transition to Resolved on an agent's unsupported assertion.
 - **Done is not Released**. Production/website/TestFlight deployment requires separate explicit authorisation and verification.
 
 ## Fail-safe
