@@ -6,6 +6,8 @@ Use the supplied MASIS issue key and requested mode. If either is missing, ask o
 - DoR: https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/327681/Masis+Definition+of+Ready
 - DoD: https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/524289/Masis+Definition+of+Done
 
+**Exact Jira completion status:** `Resolved` (ID `5`) is mapped to the board column named `Done`. The Definition of Done describes the evidence required before a transition to `Resolved`. There is no separate Jira status named `Done`; never try to transition to one.
+
 ## Step 1: Load and verify facts (both modes)
 
 1. Read the *existing* Jira issue using Atlassian MCP. Confirm project MASIS, type, status, description, acceptance criteria, decisions and related links. Do not create a duplicate issue. A project/branch/issue key guess is not evidence.
@@ -27,7 +29,7 @@ Use the supplied MASIS issue key and requested mode. If either is missing, ask o
 7. Implement only in affected repositories, respecting original branches and separate repository rules. Run focused and relevant broader automated verification, then independent fresh-context review. Record real results, not anticipated results.
 8. Perform applicable manual/device verification (including real iPhone/Apple Watch when required) or explicitly mark blocked. Update canonical feature documentation plus affected repo docs, keeping intent and actual implementation distinct.
 9. Post a **Delivery Evidence** summary on the existing Jira issue: acceptance criteria with evidence; per-repo affected/unaffected/unverified matrix; build/test commands and results; independent review link and findings; device/manual checks; PR/commit references; documentation links; risks and follow-ups.
-10. Only recommend Done after reading current DoD and checking every applicable criterion. Never mark Done on unverified assertions. Any status transition needs user permission and supporting evidence. Done does not authorise a production, TestFlight or public website release.
+10. Only recommend transitioning to **Resolved** after reading current DoD and checking every applicable criterion. Never transition to Resolved on unverified assertions. Any status transition needs user permission and supporting evidence. Completion in Jira does not authorise a production, TestFlight or public website release.
 11. Return a concise report: implementation summary, verified results, unresolved blockers, Jira status, and one next action.
 
 ## Fail-closed requirements
