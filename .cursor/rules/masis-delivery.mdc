@@ -1,0 +1,48 @@
+---
+description: Masis Jira delivery governance. Apply when refining, implementing, reviewing or closing MASIS work.
+alwaysApply: true
+---
+
+# Masis governed delivery (MASIS-6)
+
+This rule applies to tracked Masis work in this repository, alongside all existing project rules. It does not override stricter security, coding, commit, deployment or release policies. For a supported manual workflow use `/masis-workflow MASIS-123 refine` or `/masis-workflow MASIS-123 deliver`.
+
+## Policies (read the current canonical text, not just this summary)
+
+- Definition of Ready: https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/327681/Masis+Definition+of+Ready
+- Definition of Done: https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/524289/Masis+Definition+of+Done
+- Jira project: https://masis-app.atlassian.net/jira/software/projects/MASIS
+
+If Confluence or Jira MCP is unavailable, report the inaccessible source and stop before asserting a gate passed or making a status change. Do not treat inaccessible policy or evidence as approval. Never fabricate a tool response.
+
+## Repositories: assess all four, change only what the issue requires
+
+- `ryanandrewbaker/lifepilot`: backend, web, database, shared contracts and canonical feature documentation. Default base `main`.
+- `ryanandrewbaker/lifepilot-apple`: iPhone, Watch, HealthKit. Default base `main`.
+- `ryanandrewbaker/openGym`: strength execution and Masis integration. **Masis branch `lifepilot-integration`**, not upstream `main`; verify current target branch before edits.
+- `ryanandrewbaker/lifepilot-website`: public website. Default base `main`.
+
+For each issue record each repository as affected / unaffected with reason / unverified. Never treat a cross-repo change as verified based on one repo alone. Relevant code and docs in another repo must actually be inspected, or marked unverified and escalated.
+
+## Product approval and phase boundaries
+
+- ChatGPT and the user refine product intent; the Jira issue records approved outcomes, acceptance criteria and decisions. Cursor verifies current implementation and recommends how to deliver.
+- Backlog capture is permitted with incomplete detail. **Never add an issue to a sprint without explicit user instruction.**
+- In `refine` mode, gather facts, update the Jira readiness assessment and recommend whether the item can be moved to Ready. Do not modify product code in this phase.
+- Before implementing, require an identified Jira issue, readable current DoR, issue status **Ready**, approved acceptance criteria, and supporting readiness evidence for all applicable criteria. A status name alone is not evidence. If missing, stop implementation and report missing items. Critical incident exception: require explicit approval and record what is bypassed.
+- Material scope or architecture changes require user approval. Do not rewrite accepted criteria silently.
+- Do not conflate development with delivery: no commits, pushes, merges, production changes, TestFlight or public website deploys without appropriate user authorisation under existing repository rules.
+
+## Completion gate
+
+- Work proceeds In Progress -> Review and Test -> Done. Re-read current DoD at final review.
+- Verification must describe exact commands/checks and real outcomes. Distinguish passed, failed, blocked, not run and N/A with reasons. Do not claim a physical device, HealthKit, GPS, WatchConnectivity or manual UI test was performed unless it actually was.
+- Require independent fresh-context review for substantive changes; a self-review alone is not proof. Resolve blocking findings and verify the final changed code.
+- Maintain canonical feature documents' distinction between **approved intent** and **verified implementation**; sync affected repository-specific documentation. Do not change unrelated documentation.
+- Record test evidence, independent review, affected repo matrix, PR/commit references, documentation updates and remaining risks on the *existing* Jira issue.
+- Recommend Done only if applicable DoD items are evidenced and user approval is obtained for closure. Do not make the Done transition on an agent's unsupported assertion.
+- **Done is not Released**. Production/website/TestFlight deployment requires separate explicit authorisation and verification.
+
+## Fail-safe
+
+If the issue cannot be read, policy is unavailable, readiness is inadequate or testing is incomplete, make the missing evidence visible. Do not silently advance status, commit, merge or claim success. Jira transition restrictions are a separate administrative control and must be verified in Jira; these Cursor instructions are process guidance, not a server-side validator.
