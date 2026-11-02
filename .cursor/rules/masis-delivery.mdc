@@ -1,13 +1,13 @@
 ---
-description: Masis Jira delivery governance. Apply when refining, implementing, reviewing or closing MASIS work.
+description: Masis Jira delivery governance. Apply when discovering, implementing, reviewing or closing MASIS work.
 alwaysApply: true
 ---
 
-# Masis governed delivery (MASIS-6)
+# Masis governed delivery (MASIS-6, extended by MASIS-12)
 
-This rule applies to every code or configuration change in this repository, alongside all existing project rules. It does not override stricter security, coding, commit, deployment or release policies. Any such change requires an existing MASIS issue key. If no issue key is present, stop before writing or editing files and ask for the issue key or for refinement. Do not infer an issue from a branch name, commit message, or chat topic. Read-only inspection, explanation, and design discussion do not require an issue. Proposing text for approval is allowed; applying it is not. For a supported manual workflow use `/masis-workflow MASIS-123 refine` or `/masis-workflow MASIS-123 deliver`. If this always-on rule and `.cursor/commands/masis-workflow.md` disagree, stop and report the contradiction. Do not select the less restrictive instruction.
+This rule applies to every code or configuration change in this repository, alongside all existing project rules. It does not override stricter security, coding, commit, deployment or release policies. Any such change requires an existing MASIS issue key. If no issue key is present, stop before writing or editing files and ask for the issue key. Do not infer an issue from a branch name, commit message, or chat topic. Read-only inspection, explanation, and design discussion do not require an issue. Proposing text for approval is allowed; applying it is not. For a supported manual workflow use `/masis-workflow MASIS-123 discover` or `/masis-workflow MASIS-123 deliver`. **There is no Cursor `refine` mode.** Refinement, readiness assessment completion and transition to Ready are owned by the user, ChatGPT or another designated tool—not Cursor. If this always-on rule and `.cursor/commands/masis-workflow.md` disagree, stop and report the contradiction. Do not select the less restrictive instruction.
 
-An expedited exception still requires a recorded MASIS issue and explicit user approval on that issue before any edit. The issue must record the urgency and the specific readiness steps waived. An exception may waive only those specified Definition of Ready requirements. It does not bypass Jira workflow restrictions, issue tracking, independent review, required testing, commit, merge, or deployment approvals, release authorisation, or sprint controls.
+An expedited exception still requires a recorded MASIS issue and explicit user approval on that issue before any edit. The issue must record the urgency and the specific readiness steps waived. An exception may waive only those specified Definition of Ready requirements. Any applicable DoR criterion still **Outstanding** and not explicitly waived on the issue still blocks delivery. It does **not** bypass Epic-at-creation policy, active-sprint membership, permitted Jira transitions, Jira-comment approval evidence, independent review, merge or deployment authorisation, review-stage merging, verification, sprint rollover, or human/ChatGPT-only closure.
 
 ## Policies (read the current canonical text, not just this summary)
 
@@ -19,43 +19,101 @@ If Jira or Confluence MCP is unavailable, or required user approval or readiness
 
 ## Repositories: assess all four, change only what the issue requires
 
-- `ryanandrewbaker/lifepilot`: backend, web, database, shared contracts and canonical feature documentation. Default base `main`.
-- `ryanandrewbaker/lifepilot-apple`: iPhone, Watch, HealthKit. Default base `main`.
-- `ryanandrewbaker/openGym`: strength execution and Masis integration. **Masis branch `lifepilot-integration`**, not upstream `main`; verify current target branch before edits.
-- `ryanandrewbaker/lifepilot-website`: public website. Default base `main`.
+- `ryanandrewbaker/lifepilot`: backend, web, database, shared contracts and canonical feature documentation. **Authorised production source branch:** `main`.
+- `ryanandrewbaker/lifepilot-apple`: iPhone, Watch, HealthKit. **Authorised production source branch:** `main`.
+- `ryanandrewbaker/openGym`: strength execution and Masis integration. **Masis delivery branch `lifepilot-integration`**, not upstream `main`; **authorised production source branch:** `lifepilot-integration`. Vision may pull this branch when OpenGym deployment is enabled.
+- `ryanandrewbaker/lifepilot-website`: public website. **Authorised production source branch:** `main`.
 
-For each issue record each repository as affected / unaffected with reason / unverified. Never treat a cross-repo change as verified based on one repo alone. Relevant code and docs in another repo must actually be inspected, or marked unverified and escalated.
+For each issue record each repository as affected / unaffected with reason / unverified. Never treat a cross-repo change as verified based on one repo alone. Relevant code and docs in another repo must actually be inspected, or marked unverified and escalated. Do not modify `openGym/main` for Masis delivery work.
+
+## Sprint, Epic and backlog eligibility
+
+- **Backlog** is for capture, prioritisation and administration—not formal refinement or delivery.
+- Every **Story** must have a valid **Epic** parent when created. If Jira does not enforce this server-side, user/ChatGPT must enforce it at creation; Cursor must refuse delivery on a Story without an Epic parent.
+- **Active sprint membership** is mandatory from **Refinement** onward for refinement and delivery actions. A future sprint, closed sprint, or sprint field without an **active** sprint is insufficient.
+- **Never add an issue to a sprint** or roll work into a new sprint without explicit user instruction recorded in Jira.
+- When a sprint is **no longer active**, stop delivery actions (edits, merges, deployment, delivery status advances, verified-completion claims) until the user explicitly places the issue in another **active** sprint. Read-only investigation may continue.
+- Both the requirements tool and Cursor independently verify Epic and active-sprint eligibility. Label checks that Jira does not enforce as **Cursor/process gates**, not server-side protection.
+
+## Refinement and readiness (outside Cursor)
+
+- The user, ChatGPT or a delegated tool owns problem definition, acceptance criteria, architectural decisions, DoR evidence and approval to move to **Ready**.
+- Cursor may perform **read-only technical discovery** only when specifically requested (see `/masis-workflow … discover`). It must not update readiness assessments, recommend or perform transition to Ready, or change approved requirements.
+- Moving to **Ready** requires user/ChatGPT authorisation recorded in a Jira comment before the transition.
+
+## Jira comment approval evidence
+
+Before each governed action, read the Jira issue and verify a **genuine user approval comment** that exists **before** the action and matches the **exact** requested action, scope, branch/PR and deployment implications. Required approvals include at minimum:
+
+- Ready → In Progress (implementation start)
+- In Progress → Review and Test
+- Review and Test → In Progress (rework)
+- Each commit/push when repository rules require Jira evidence
+- Each PR merge (separate approval per merge)
+- Each deployment or production change
+- Closure to Resolved (Cursor never performs this)
+
+Each approval comment must identify the approving user, date/time, authorised action and scope, related branch/PR or changeset, and known production or auto-deploy consequences. Cursor may append a comment recording approval the user gave in chat, but must **never** invent approval or treat Jira status alone as authorisation. Reject absent, stale, ambiguous or scope-mismatched comments.
+
+## Cursor Jira transition authority
+
+Cursor may perform **only** these Jira transitions, each only after the matching Jira-comment approval and status read-back:
+
+1. **Ready → In Progress**
+2. **In Progress → Review and Test**
+
+Cursor must **not** transition **Refinement → Ready**, **Review and Test → In Progress**, **Resolved**, or any other workflow transition unless a future issue explicitly redefines ownership. **Even if the user instructs closure in Cursor**, do not transition to **Resolved**; explain that only the user in Jira or ChatGPT on explicit recorded instruction may close.
 
 ## Product approval and phase boundaries
 
-- ChatGPT and the user refine product intent; the Jira issue records approved outcomes, acceptance criteria and decisions. Cursor verifies current implementation and recommends how to deliver.
-- Backlog capture is permitted with incomplete detail. **Never add an issue to a sprint without explicit user instruction.**
-- In `refine` mode, gather facts, update the Jira readiness assessment and recommend whether the item can be moved to Ready. Do not modify code or configuration in this phase.
-- Before every code or configuration edit: classify Jira status:
-  - **Ready is initiation.** The issue must currently be Ready. The current Definition of Ready is readable. The readiness assessment must mark each applicable criterion Verified, N/A with rationale, or explicitly waived under an existing, user-approved expedited exception recorded on that MASIS issue. Any Outstanding criterion not explicitly waived still blocks delivery. The user has explicitly authorised starting delivery. With that authorisation, transition from Ready to In Progress and read the status back before any edit. Ready alone is not permission to edit. An expedited exception does not bypass Jira workflow restrictions. The Ready -> In Progress transition and status read-back remain mandatory before editing.
-  - **In Progress is continuation.** Retrieve Jira changelog or history evidence and confirm the issue previously reached Ready. Continue only when that history is complete and shows Ready was reached, the approved readiness assessment and acceptance criteria still apply, and there is no unresolved material scope change. This includes rework after Review and Test once the user has approved the return to In Progress. If the necessary history is incomplete or unavailable, or policies cannot be read, stop.
-  - **Review and Test is review only.** Do not edit code or configuration. Record findings. Rework requires the user's approval to return to In Progress; the continuation rule then applies.
-  - **Backlog, Refinement, Resolved, and any other status stop the edit.** Backlog and Refinement use refine. Resolved is closed. Do not weaken these gates.
-- A status name alone is not evidence. Missing Definition of Ready evidence or an unresolved material question stops the edit. Offer refine when the issue is not yet ready to continue. An expedited exception may waive only the readiness steps already recorded on that issue, including the user's approval, the urgency, and the waived steps. It does not bypass Jira workflow restrictions, issue tracking, independent review, required testing, commit, merge, or deployment approvals, release authorisation, or sprint controls; it does not allow edits during Review and Test or reopen Resolved.
+- ChatGPT and the user refine product intent; the Jira issue records approved outcomes, acceptance criteria and decisions. Cursor verifies current implementation and recommends how to deliver within the approved baseline.
+- Before every code or configuration edit: classify Jira status and sprint state:
+  - **Ready is initiation.** The issue must currently be Ready, belong to an **active** sprint, satisfy Epic rules for Stories, have readable DoR, and have a Jira comment explicitly authorising **Ready → In Progress** (or continuation under In Progress rules). With that authorisation, transition Ready → In Progress and read status back before any edit. Ready alone is not permission to edit. An expedited exception may waive only readiness steps explicitly recorded on the issue with user approval; any applicable DoR criterion still **Outstanding** and not waived still blocks delivery.
+  - **In Progress is continuation.** Confirm the issue previously reached Ready (changelog/history), active sprint membership, approved baseline, and no unresolved material scope change. After **Review and Test**, resuming implementation requires an explicit user/ChatGPT Jira-comment authorising **Review and Test → In Progress** before any edit. Implementation and developer tests occur here; **prepare PRs but do not merge**. Commits/pushes require applicable Jira-comment and repository approvals.
+  - **Review and Test is review, merge and integrated verification.** No new implementation edits. Perform independent fresh-context review, run checks, obtain **separate Jira-comment approval for each PR merge**, merge only into the repository’s **authorised production source branch**, then verify integrated/deployed behaviour and record results. Failed verification requires documented approved rework (return to In Progress by user/ChatGPT, not Cursor unless later redefined).
+  - **Backlog, Refinement, Resolved, and any other status stop the edit.** Resolved is closed. Do not weaken these gates.
 - Material scope or architecture changes require user approval. Do not rewrite accepted criteria silently.
-- Do not conflate development with delivery: no commits, pushes, merges, production changes, TestFlight or public website deploys without appropriate user authorisation under existing repository rules.
+- Do not conflate development with delivery: no commits, pushes, merges, production changes, TestFlight or public website deploys without appropriate Jira-comment and repository authorisation.
+
+## High-risk architecture review (interim)
+
+For ordinary changes, a **fresh-context AI reviewer** on the final diff is sufficient independent review. The implementing agent reviewing its own output is not independent. Additionally require a **named human architecture reviewer** and a Jira-recorded decision before Ready when work triggers: authentication/authorisation/secrets; personal or health-data security; destructive schema/data migration; breaking cross-repository/API contracts; HealthKit or workout-recording integrity; or major production/infrastructure architecture. Detailed risk taxonomy belongs to MASIS-14.
+
+## Merge, branches and deployment
+
+- **In Progress:** implement; do **not** merge PRs.
+- **Review and Test:** merge only after independent review and explicit per-PR Jira-comment merge approval that acknowledges deployment consequences.
+- Merging to an authorised production source branch may enable or trigger production deployment (automatically or via separate scripts). A merge is not proof production updated or that acceptance criteria pass.
+- **Done is not Released.** Deployment requires separate explicit authorisation and verification.
 
 ## Completion gate
 
-**Jira status mapping:** The board column **Done** contains the actual Jira workflow status **Resolved** (status ID `5`, Done category). All Definition of Done requirements apply **before transitioning to Resolved**. Do not add or look for a separate status named Done.
+**Jira status mapping:** The board column **Done** contains the actual Jira workflow status **Resolved** (status ID `5`, Done category). All Definition of Done requirements apply **before** a human/ChatGPT transition to **Resolved**. Cursor **must not** transition to Resolved.
 
-- Work proceeds In Progress -> Review and Test -> In Progress for approved rework -> Review and Test -> **Resolved** (board column: Done). Re-read current DoD at final review.
-- Verification must describe exact commands/checks and real outcomes. Distinguish passed, failed, blocked, not run and N/A with reasons. Do not claim a physical device, HealthKit, GPS, WatchConnectivity or manual UI test was performed unless it actually was.
-- Require independent fresh-context review for substantive changes; a self-review alone is not proof. Resolve blocking findings and verify the final changed code.
-- Maintain canonical feature documents' distinction between **approved intent** and **verified implementation**; sync affected repository-specific documentation. Do not change unrelated documentation.
+- Work proceeds In Progress → Review and Test → (approved rework) In Progress → Review and Test → **Resolved** by user/ChatGPT only.
+- Verification must describe exact commands/checks and real outcomes. Distinguish passed, failed, blocked, not run and N/A with reasons. Do not claim physical device, simulator, HealthKit, GPS, WatchConnectivity or manual UI verification unless it was actually performed.
+- Require independent fresh-context review for substantive changes; self-review alone is not proof.
+- Maintain canonical feature documents' distinction between **approved intent** and **verified implementation**; sync affected repository-specific documentation.
 - Record test evidence, independent review, affected repo matrix, PR/commit references, documentation updates and remaining risks on the *existing* Jira issue.
-- Recommend transitioning to **Resolved** only if applicable DoD items are evidenced and user approval is obtained for closure. Do not transition to Resolved on an agent's unsupported assertion.
-- **Done is not Released**. Production/website/TestFlight deployment requires separate explicit authorisation and verification.
+- Cursor may **recommend** closure when DoD evidence is complete; it must not perform the transition.
+
+## Enforcement: Jira, GitHub and Cursor
+
+| Control | Typical enforcement (MASIS-12) |
+| --- | --- |
+| Story requires Epic at creation | **Process / Cursor** unless Jira field configuration is later proven |
+| Active sprint for refinement/delivery | **Process / user-ChatGPT / Cursor**; Jira may not block all transitions today |
+| Cursor transition limits | **Cursor policy** |
+| Jira-comment approvals | **Cursor policy** (comments are durable evidence in Jira) |
+| Merge only in Review and Test | **Cursor policy**; GitHub branch protection not yet configured (MASIS-14) |
+| PR merge / CI gates linked to Jira | **Deferred MASIS-14** |
+
+Never claim Jira or GitHub enforces a gate unless integration or configuration is verified. Jira workflow transition restrictions are administrative controls separate from these Cursor instructions.
 
 ## Fail-safe
 
-**Pre-edit (Definition of Ready and phase gates):** If the issue cannot be read, no MASIS issue key is available, Jira or Confluence is unavailable, required approval or readiness evidence cannot be read, readiness is inadequate for the attempted edit, or prior Ready cannot be verified from Jira changelog or history for an In Progress continuation, make the missing evidence visible. Stop before any code or configuration edit and before any Jira status change that would start or continue delivery without evidence. Do not treat inaccessible policy or evidence as approval.
+**Pre-edit:** Missing issue key, inactive sprint (for delivery), missing Epic on a Story, missing or invalid Jira-comment approval for the attempted action, inaccessible Jira/Confluence, inadequate readiness (including unwaived Outstanding DoR criteria), or inability to verify prior Ready for In Progress continuation—all block edits and unauthorised Jira transitions.
 
-**Before Resolved (Definition of Done):** Missing or incomplete required testing, independent review, or other applicable DoD evidence blocks recommending or performing a transition to **Resolved** and blocks claiming completion. It does not block otherwise authorised implementation or rework while the issue is **In Progress**, including an approved return from Review and Test.
+**Before Resolved:** Missing DoD evidence blocks Cursor from recommending closure without qualification; it never blocks authorised In Progress rework. Cursor never performs Resolved.
 
-Do not silently advance status, commit, merge or claim success. Never fabricate a tool response. Jira transition restrictions are a separate administrative control and must be verified in Jira; these Cursor instructions are process guidance, not a server-side validator.
+Do not silently advance status, commit, merge or claim success. Never fabricate a tool response.
