@@ -5,7 +5,9 @@ alwaysApply: true
 
 # Masis governed delivery (MASIS-6)
 
-This rule applies to tracked Masis work in this repository, alongside all existing project rules. It does not override stricter security, coding, commit, deployment or release policies. For a supported manual workflow use `/masis-workflow MASIS-123 refine` or `/masis-workflow MASIS-123 deliver`.
+This rule applies to every code or configuration change in this repository, alongside all existing project rules. It does not override stricter security, coding, commit, deployment or release policies. Any such change requires an existing MASIS issue key. If no issue key is present, stop before writing or editing files and ask for the issue key or for refinement. Do not infer an issue from a branch name, commit message, or chat topic. Read-only inspection, explanation, and design discussion do not require an issue. Proposing text for approval is allowed; applying it is not. For a supported manual workflow use `/masis-workflow MASIS-123 refine` or `/masis-workflow MASIS-123 deliver`. If this always-on rule and `.cursor/commands/masis-workflow.md` disagree, stop and report the contradiction. Do not select the less restrictive instruction.
+
+An expedited exception still requires a recorded MASIS issue and explicit user approval on that issue before any edit. The issue must record the urgency and the specific readiness steps waived. An exception may waive only those specified Definition of Ready requirements. It does not bypass Jira workflow restrictions, issue tracking, independent review, required testing, commit, merge, or deployment approvals, release authorisation, or sprint controls.
 
 ## Policies (read the current canonical text, not just this summary)
 
@@ -13,7 +15,7 @@ This rule applies to tracked Masis work in this repository, alongside all existi
 - Definition of Done: https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/524289/Masis+Definition+of+Done
 - Jira project: https://masis-app.atlassian.net/jira/software/projects/MASIS
 
-If Confluence or Jira MCP is unavailable, report the inaccessible source and stop before asserting a gate passed or making a status change. Do not treat inaccessible policy or evidence as approval. Never fabricate a tool response.
+If Jira or Confluence MCP is unavailable, or required user approval or readiness evidence cannot be read, report what is inaccessible and stop before any code or configuration edit and before any Jira status change. Do not treat inaccessible policy or evidence as approval. Never fabricate a tool response.
 
 ## Repositories: assess all four, change only what the issue requires
 
@@ -28,8 +30,13 @@ For each issue record each repository as affected / unaffected with reason / unv
 
 - ChatGPT and the user refine product intent; the Jira issue records approved outcomes, acceptance criteria and decisions. Cursor verifies current implementation and recommends how to deliver.
 - Backlog capture is permitted with incomplete detail. **Never add an issue to a sprint without explicit user instruction.**
-- In `refine` mode, gather facts, update the Jira readiness assessment and recommend whether the item can be moved to Ready. Do not modify product code in this phase.
-- Before implementing, require an identified Jira issue, readable current DoR, issue status **Ready**, approved acceptance criteria, and supporting readiness evidence for all applicable criteria. A status name alone is not evidence. If missing, stop implementation and report missing items. Critical incident exception: require explicit approval and record what is bypassed.
+- In `refine` mode, gather facts, update the Jira readiness assessment and recommend whether the item can be moved to Ready. Do not modify code or configuration in this phase.
+- Before every code or configuration edit: classify Jira status:
+  - **Ready is initiation.** The issue must currently be Ready. The current Definition of Ready is readable. The readiness assessment must mark each applicable criterion Verified, N/A with rationale, or explicitly waived under an existing, user-approved expedited exception recorded on that MASIS issue. Any Outstanding criterion not explicitly waived still blocks delivery. The user has explicitly authorised starting delivery. With that authorisation, transition from Ready to In Progress and read the status back before any edit. Ready alone is not permission to edit. An expedited exception does not bypass Jira workflow restrictions. The Ready -> In Progress transition and status read-back remain mandatory before editing.
+  - **In Progress is continuation.** Retrieve Jira changelog or history evidence and confirm the issue previously reached Ready. Continue only when that history is complete and shows Ready was reached, the approved readiness assessment and acceptance criteria still apply, and there is no unresolved material scope change. This includes rework after Review and Test once the user has approved the return to In Progress. If the necessary history is incomplete or unavailable, or policies cannot be read, stop.
+  - **Review and Test is review only.** Do not edit code or configuration. Record findings. Rework requires the user's approval to return to In Progress; the continuation rule then applies.
+  - **Backlog, Refinement, Resolved, and any other status stop the edit.** Backlog and Refinement use refine. Resolved is closed. Do not weaken these gates.
+- A status name alone is not evidence. Missing Definition of Ready evidence or an unresolved material question stops the edit. Offer refine when the issue is not yet ready to continue. An expedited exception may waive only the readiness steps already recorded on that issue, including the user's approval, the urgency, and the waived steps. It does not bypass Jira workflow restrictions, issue tracking, independent review, required testing, commit, merge, or deployment approvals, release authorisation, or sprint controls; it does not allow edits during Review and Test or reopen Resolved.
 - Material scope or architecture changes require user approval. Do not rewrite accepted criteria silently.
 - Do not conflate development with delivery: no commits, pushes, merges, production changes, TestFlight or public website deploys without appropriate user authorisation under existing repository rules.
 
@@ -37,7 +44,7 @@ For each issue record each repository as affected / unaffected with reason / unv
 
 **Jira status mapping:** The board column **Done** contains the actual Jira workflow status **Resolved** (status ID `5`, Done category). All Definition of Done requirements apply **before transitioning to Resolved**. Do not add or look for a separate status named Done.
 
-- Work proceeds In Progress -> Review and Test -> **Resolved** (board column: Done). Re-read current DoD at final review.
+- Work proceeds In Progress -> Review and Test -> In Progress for approved rework -> Review and Test -> **Resolved** (board column: Done). Re-read current DoD at final review.
 - Verification must describe exact commands/checks and real outcomes. Distinguish passed, failed, blocked, not run and N/A with reasons. Do not claim a physical device, HealthKit, GPS, WatchConnectivity or manual UI test was performed unless it actually was.
 - Require independent fresh-context review for substantive changes; a self-review alone is not proof. Resolve blocking findings and verify the final changed code.
 - Maintain canonical feature documents' distinction between **approved intent** and **verified implementation**; sync affected repository-specific documentation. Do not change unrelated documentation.
@@ -47,4 +54,8 @@ For each issue record each repository as affected / unaffected with reason / unv
 
 ## Fail-safe
 
-If the issue cannot be read, policy is unavailable, readiness is inadequate or testing is incomplete, make the missing evidence visible. Do not silently advance status, commit, merge or claim success. Jira transition restrictions are a separate administrative control and must be verified in Jira; these Cursor instructions are process guidance, not a server-side validator.
+**Pre-edit (Definition of Ready and phase gates):** If the issue cannot be read, no MASIS issue key is available, Jira or Confluence is unavailable, required approval or readiness evidence cannot be read, readiness is inadequate for the attempted edit, or prior Ready cannot be verified from Jira changelog or history for an In Progress continuation, make the missing evidence visible. Stop before any code or configuration edit and before any Jira status change that would start or continue delivery without evidence. Do not treat inaccessible policy or evidence as approval.
+
+**Before Resolved (Definition of Done):** Missing or incomplete required testing, independent review, or other applicable DoD evidence blocks recommending or performing a transition to **Resolved** and blocks claiming completion. It does not block otherwise authorised implementation or rework while the issue is **In Progress**, including an approved return from Review and Test.
+
+Do not silently advance status, commit, merge or claim success. Never fabricate a tool response. Jira transition restrictions are a separate administrative control and must be verified in Jira; these Cursor instructions are process guidance, not a server-side validator.
