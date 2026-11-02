@@ -24,6 +24,15 @@ An expedited exception still requires a recorded MASIS issue and explicit user a
 3. Inspect the current implementation and relevant feature contracts. Explicitly assess all four repositories: lifepilot, lifepilot-apple, openGym (Masis `lifepilot-integration` branch) and lifepilot-website. Mark inaccessible repos unverified.
 4. Identify cross-repository dependencies, profile/data ownership, HealthKit/device risks, migration risks and verification scope where applicable.
 5. If the sprint is not **active**, stop delivery actions (edits, merges, deployment, delivery transitions). Read-only discovery may continue when requested.
+6. **Resumed session:** When continuing work on the supplied issue, read the latest **Session Handover** on the issue, the authoritative description and acceptance criteria, and local `git status` in affected repositories before acting. Preserve unrelated uncommitted work (isolated branches/worktrees when needed).
+
+## Story-specific technical refinement gate (MASIS-22)
+
+When `discover` or `deliver` is invoked **for a specific MASIS issue** and the work is **Story-specific technical refinement** (typically while the issue is in **Refinement**):
+
+1. Verify a Jira comment records explicit user confirmation that product refinement is complete or written requirements are satisfactory (DoR templates). **No confirmation = stop** Story-specific technical refinement; return findings to user/ChatGPT.
+2. That confirmation permits **technical refinement only**—not Ready, implementation, commit/push, merge or deploy.
+3. **Does not apply** to general read-only repository browsing, explanation or design discussion unrelated to a Story's technical refinement pass.
 
 ## Jira comment approval verification (deliver mode and transitions)
 
@@ -40,10 +49,13 @@ Cursor may append a comment faithfully recording user approval obtained in chat;
 
 Use only when the user or ChatGPT explicitly requests technical discovery input for refinement—not for Cursor to own refinement.
 
+Apply the **Story-specific technical refinement gate** when the discovery is for a Story in technical refinement.
+
 5. Inspect code, configuration, contracts, branches and deployment scripts read-only across affected repositories.
-6. Summarise findings, risks, repository impact, feasible enforcement and open questions **for the requirements owner**.
+6. Summarise findings, risks, repository impact, feasible enforcement and open questions **for the requirements owner**. Include a proposed **story-point estimate** and **confidence** for user/ChatGPT to record in Jira before Ready (prefer 1–3 points; review 5 for splitting; split or spike 8+).
 7. **Do not** edit code or configuration, update DoR assessments as authoritative readiness, recommend or perform transition to Ready, assign sprints, or change Jira status (except as explicitly authorised elsewhere).
 8. Return findings to the user/ChatGPT for inclusion in Jira; do not treat this output as approved product intent until recorded on the issue.
+9. When the session ends after Story-specific discovery, append a **Session Handover** to the issue (DoR template) unless the user instructs otherwise.
 
 ## Mode: deliver
 
@@ -59,6 +71,7 @@ Use only when the user or ChatGPT explicitly requests technical discovery input 
 9. Post **Delivery Evidence** on the Jira issue: acceptance criteria mapping; per-repo matrix; commands and real results; review outcome; PR references; documentation; risks.
 10. **Never** transition to Resolved. May recommend closure to user/ChatGPT when DoD evidence is complete.
 11. Return a concise report: summary, verified results, blockers, Jira status, enforcement limits, and the one next action requiring separate approval.
+12. **Session Handover:** At the end of a deliver session on the issue, append a concise handover comment (DoR template): completed work, remaining work, decisions/blockers, branches/PRs/commits and verification actually performed, and one next action. Do not claim tests or devices not used.
 
 ## Fail-closed requirements
 

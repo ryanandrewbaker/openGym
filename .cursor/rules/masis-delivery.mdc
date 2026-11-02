@@ -28,12 +28,35 @@ For each issue record each repository as affected / unaffected with reason / unv
 
 ## Sprint, Epic and backlog eligibility
 
-- **Backlog** is for capture, prioritisation and administration—not formal refinement or delivery.
+- **Backlog** holds intake and **product refinement** (problem, outcomes, acceptance criteria, scope, optional coarse T-shirt size). It is not **technical refinement**, implementation or delivery.
 - Every **Story** must have a valid **Epic** parent when created. If Jira does not enforce this server-side, user/ChatGPT must enforce it at creation; Cursor must refuse delivery on a Story without an Epic parent.
 - **Active sprint membership** is mandatory from **Refinement** onward for refinement and delivery actions. A future sprint, closed sprint, or sprint field without an **active** sprint is insufficient.
 - **Never add an issue to a sprint** or roll work into a new sprint without explicit user instruction recorded in Jira.
 - When a sprint is **no longer active**, stop delivery actions (edits, merges, deployment, delivery status advances, verified-completion claims) until the user explicitly places the issue in another **active** sprint. Read-only investigation may continue.
 - Both the requirements tool and Cursor independently verify Epic and active-sprint eligibility. Label checks that Jira does not enforce as **Cursor/process gates**, not server-side protection.
+- A sprint is a deliberate commitment to **attention and progress** (including finishing technical refinement or reaching Ready), not a guarantee that every selected Story will be **implemented** or **closed** in that sprint.
+
+## Two refinement stages (MASIS-22)
+
+### Product refinement (Backlog)
+
+- Owned by the **user and ChatGPT** (not Cursor).
+- Shape the problem, desired outcome, user-visible acceptance criteria, protected behaviour, non-goals, dependencies and initial scope.
+- Split oversized ideas into independently valuable vertical **Stories**, not by technical layer.
+- Optional coarse **T-shirt size** (S/M/L/XL) for early scope assessment—not a committed engineering estimate.
+- Work may stay in Backlog until deliberately selected for an active sprint. A partially shaped Story may enter a sprint specifically to **complete product refinement**.
+
+### Technical refinement (active sprint, Refinement status)
+
+- Begins only after the Story is in an **active** sprint with explicit user authorisation recorded in Jira.
+- **Mandatory entry gate:** Before Story-specific technical refinement, the user/ChatGPT must confirm product refinement is complete or the written requirements are satisfactory; record the **actual** affirmative confirmation in a Jira comment on that Story. **No confirmation = stop** Story-specific technical refinement. Do not infer consent from sprint membership, status or prior chat.
+- Cursor may run **read-only** `/masis-workflow … discover` when requested. Cursor must not amend product intent, complete DoR as authoritative readiness, or approve Ready.
+- Assess implementation approach, affected repositories, architecture, dependencies, risks and verification; record a **Readiness Assessment** before Ready.
+- Record numeric **Story Points** (`customfield_10016`) and **estimate confidence** (e.g. Low/Medium/High) before Ready, reflecting implementation, review, verification and uncertainty.
+- **Sizing guidance:** prefer **1–3** points; **review 5-point** Stories for splitting; normally **split or spike 8+** points. Points are relative, not fixed hours.
+- Preserve separate approvals: **product confirmation** (technical refinement entry) ≠ **Refinement → Ready** ≠ **Ready → In Progress** (implementation) ≠ merge/deploy/closure.
+
+**Exemption:** General read-only repository browsing, explanation and design discussion **without** a Story-specific technical refinement pass remain permitted without this product-confirmation gate (MASIS-12 read-only exemption).
 
 ## Refinement and readiness (outside Cursor)
 
@@ -109,6 +132,22 @@ For ordinary changes, a **fresh-context AI reviewer** on the final diff is suffi
 | PR merge / CI gates linked to Jira | **Deferred MASIS-14** |
 
 Never claim Jira or GitHub enforces a gate unless integration or configuration is verified. Jira workflow transition restrictions are administrative controls separate from these Cursor instructions.
+
+## Session continuity (MASIS-22)
+
+Every Story in an **active** sprint should record on the Jira issue:
+
+- **Intended sprint outcome** (e.g. complete technical refinement, reach Ready, implement, or verify—not necessarily full implementation).
+- **Current state** and outstanding work.
+- **One clear next action.**
+
+At the **end** of each Cursor session working the issue, append a concise **Session Handover** Jira comment: completed work; what remains; decisions and blockers; relevant branches, commits, PRs and **actual** verification run (do not claim tests or devices not used).
+
+At the **start** of a resumed session, read the Jira issue, latest handover, authoritative requirements and local **git status** before continuing. Avoid duplicate work and do not overwrite unrelated local changes (use isolated branches/worktrees when needed).
+
+A Story may finish a sprint at **Ready** without implementation when that was the agreed outcome. Do not silently roll unfinished work into a new sprint without explicit user authorisation in Jira.
+
+Copyable comment templates live in the canonical [Definition of Ready](https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/327681/Masis+Definition+of+Ready).
 
 ## Fail-safe
 
