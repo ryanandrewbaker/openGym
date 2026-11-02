@@ -71,7 +71,7 @@ Assess impact across all four repositories; change only what the issue requires.
 This README summarises the guardrails. Authoritative policy and workflow detail:
 
 - [`.cursor/rules/masis-delivery.mdc`](.cursor/rules/masis-delivery.mdc) — always-on Cursor governance
-- [`.cursor/commands/masis-workflow.md`](.cursor/commands/masis-workflow.md) — `/masis-workflow MASIS-123 refine|deliver`
+- [`.cursor/commands/masis-workflow.md`](.cursor/commands/masis-workflow.md) — `/masis-workflow MASIS-123 discover|deliver` (refinement and Ready are outside Cursor)
 - [Definition of Ready](https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/327681/Masis+Definition+of+Ready)
 - [Definition of Done](https://masis-app.atlassian.net/wiki/spaces/MASIS/pages/524289/Masis+Definition+of+Done)
 
