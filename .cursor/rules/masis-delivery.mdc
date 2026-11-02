@@ -135,15 +135,15 @@ Never claim Jira or GitHub enforces a gate unless integration or configuration i
 
 ## Session continuity (MASIS-22)
 
-Every Story in an **active** sprint should record on the Jira issue:
+Every **Story** in an **active** sprint **must maintain** on the Jira issue (kept current, including in Session Handovers):
 
 - **Intended sprint outcome** (e.g. complete technical refinement, reach Ready, implement, or verify—not necessarily full implementation).
 - **Current state** and outstanding work.
 - **One clear next action.**
 
-At the **end** of each Cursor session working the issue, append a concise **Session Handover** Jira comment: completed work; what remains; decisions and blockers; relevant branches, commits, PRs and **actual** verification run (do not claim tests or devices not used).
+At the **end** of **every** Cursor session that works an active-sprint **Story** under `/masis-workflow … discover|deliver` (or equivalent governed Story delivery), **must** append a concise **Session Handover** Jira comment: completed work; what remains; decisions and blockers; relevant branches, commits, PRs and **actual** verification run (do not claim tests or devices not used). The handover **must** include the three maintained fields above.
 
-At the **start** of a resumed session, read the Jira issue, latest handover, authoritative requirements and local **git status** before continuing. Avoid duplicate work and do not overwrite unrelated local changes (use isolated branches/worktrees when needed).
+At the **start** of a resumed session, read the Jira issue, latest handover, maintained **intended sprint outcome**, **current state** and **next action**, authoritative requirements and local **git status** before continuing. Avoid duplicate work and do not overwrite unrelated local changes (use isolated branches/worktrees when needed).
 
 A Story may finish a sprint at **Ready** without implementation when that was the agreed outcome. Do not silently roll unfinished work into a new sprint without explicit user authorisation in Jira.
 

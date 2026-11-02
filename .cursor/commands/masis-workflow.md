@@ -24,7 +24,7 @@ An expedited exception still requires a recorded MASIS issue and explicit user a
 3. Inspect the current implementation and relevant feature contracts. Explicitly assess all four repositories: lifepilot, lifepilot-apple, openGym (Masis `lifepilot-integration` branch) and lifepilot-website. Mark inaccessible repos unverified.
 4. Identify cross-repository dependencies, profile/data ownership, HealthKit/device risks, migration risks and verification scope where applicable.
 5. If the sprint is not **active**, stop delivery actions (edits, merges, deployment, delivery transitions). Read-only discovery may continue when requested.
-6. **Resumed session:** When continuing work on the supplied issue, read the latest **Session Handover** on the issue, the authoritative description and acceptance criteria, and local `git status` in affected repositories before acting. Preserve unrelated uncommitted work (isolated branches/worktrees when needed).
+6. **Resumed session:** When continuing work on the supplied issue, read the latest **Session Handover** on the issue, verify the maintained **intended sprint outcome**, **current state** and **next action**, the authoritative description and acceptance criteria, and local `git status` in affected repositories before acting. Preserve unrelated uncommitted work (isolated branches/worktrees when needed).
 
 ## Story-specific technical refinement gate (MASIS-22)
 
@@ -55,7 +55,7 @@ Apply the **Story-specific technical refinement gate** when the discovery is for
 6. Summarise findings, risks, repository impact, feasible enforcement and open questions **for the requirements owner**. Include a proposed **story-point estimate** and **confidence** for user/ChatGPT to record in Jira before Ready (prefer 1–3 points; review 5 for splitting; split or spike 8+).
 7. **Do not** edit code or configuration, update DoR assessments as authoritative readiness, recommend or perform transition to Ready, assign sprints, or change Jira status (except as explicitly authorised elsewhere).
 8. Return findings to the user/ChatGPT for inclusion in Jira; do not treat this output as approved product intent until recorded on the issue.
-9. When the session ends after Story-specific discovery, append a **Session Handover** to the issue (DoR template) unless the user instructs otherwise.
+9. When the session ends after Story-specific discovery on an active-sprint **Story**, **must** append a **Session Handover** to the issue (DoR template), including maintained **intended sprint outcome**, **current state** and **one next action**.
 
 ## Mode: deliver
 
@@ -71,7 +71,7 @@ Apply the **Story-specific technical refinement gate** when the discovery is for
 9. Post **Delivery Evidence** on the Jira issue: acceptance criteria mapping; per-repo matrix; commands and real results; review outcome; PR references; documentation; risks.
 10. **Never** transition to Resolved. May recommend closure to user/ChatGPT when DoD evidence is complete.
 11. Return a concise report: summary, verified results, blockers, Jira status, enforcement limits, and the one next action requiring separate approval.
-12. **Session Handover:** At the end of a deliver session on the issue, append a concise handover comment (DoR template): completed work, remaining work, decisions/blockers, branches/PRs/commits and verification actually performed, and one next action. Do not claim tests or devices not used.
+12. **Session Handover:** At the end of **every** deliver session on an active-sprint **Story**, **must** append a concise handover comment (DoR template): maintained intended sprint outcome, current state and next action; completed work; remaining work; decisions/blockers; branches/PRs/commits and verification actually performed. Do not claim tests or devices not used. **Does not apply** to general read-only repository browsing without a Story-focused governed session.
 
 ## Fail-closed requirements
 
