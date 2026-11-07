@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EXERCISE_VIDEO_LOAD_FAILED,
   EXERCISE_VIDEO_UNAVAILABLE,
   exerciseVideoEligible,
   exerciseVideoEntry,
@@ -51,5 +52,10 @@ describe('exerciseVideoUrl', () => {
 describe('fallback copy', () => {
   it('uses the exact unavailable string', () => {
     expect(EXERCISE_VIDEO_UNAVAILABLE).toBe('Video not yet available')
+  })
+
+  it('uses distinct copy for playback failures', () => {
+    expect(EXERCISE_VIDEO_LOAD_FAILED).toContain("Couldn't load")
+    expect(EXERCISE_VIDEO_LOAD_FAILED).not.toBe(EXERCISE_VIDEO_UNAVAILABLE)
   })
 })

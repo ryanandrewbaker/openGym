@@ -3,9 +3,16 @@ import { useUI } from '../store/useUI.js'
 import { t } from '../lib/i18n.js'
 import Icon from './Icon.jsx'
 import { Button } from './ui.jsx'
-import { EXERCISE_VIDEO_UNAVAILABLE, exerciseVideoEligible, exerciseVideoUrl } from '../lib/exercise-videos.js'
+import {
+  EXERCISE_VIDEO_LOAD_FAILED,
+  EXERCISE_VIDEO_UNAVAILABLE,
+  exerciseVideoEligible,
+  exerciseVideoUrl,
+} from '../lib/exercise-videos.js'
 
-function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
+const LOAD_TIMEOUT_MS = 20_000
+
+export function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
   const url = exerciseVideoUrl(exerciseId)
   const eligible = exerciseVideoEligible(exerciseId)
   const [phase, setPhase] = useState(url ? 'loading' : 'unavailable')
@@ -17,15 +24,16 @@ function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
       return
     }
     setPhase('loading')
-    const video = videoRef.current
-    if (video) {
-      video.pause()
-      video.removeAttribute('src')
-      video.load()
-    }
   }, [url, exerciseId])
 
-  const onLoaded = () => setPhase('ready')
+  useEffect(() => {
+    if (phase !== 'loading' || !url) return undefined
+    const timeoutId = setTimeout(() => setPhase('error'), LOAD_TIMEOUT_MS)
+    return () => clearTimeout(timeoutId)
+  }, [phase, url, exerciseId])
+
+  const markReady = () => setPhase('ready')
+
   const onError = () => setPhase('error')
 
   const retry = () => {
@@ -33,6 +41,9 @@ function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
     setPhase('loading')
     const video = videoRef.current
     if (!video) return
+    if (!video.getAttribute('src')) {
+      video.src = url
+    }
     video.load()
   }
 
@@ -57,14 +68,15 @@ function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
               controls
               playsInline
               preload="metadata"
-              onLoadedData={onLoaded}
+              onLoadedData={markReady}
+              onCanPlay={markReady}
               onError={onError}
               data-nodrag
             />
             {phase === 'loading' && <div className="exvideo-overlay dim">{t('Loading…')}</div>}
             {phase === 'error' && (
               <div className="exvideo-overlay">
-                <p className="exvideo-msg">{EXERCISE_VIDEO_UNAVAILABLE}</p>
+                <p className="exvideo-msg">{EXERCISE_VIDEO_LOAD_FAILED}</p>
                 <Button size="sm" icon="reset" onClick={retry}>{t('Retry')}</Button>
               </div>
             )}

@@ -1,6 +1,8 @@
 import { EXERCISE_VIDEO_CATALOG } from './exercise-videos.manifest.js'
 
 export const EXERCISE_VIDEO_UNAVAILABLE = 'Video not yet available'
+export const EXERCISE_VIDEO_LOAD_FAILED =
+  "Couldn't load this video. Check your connection and try again."
 
 const ENV = import.meta.env || {}
 export const VIDEO_BASE = ENV.VITE_VIDEO_BASE || '/video/'
