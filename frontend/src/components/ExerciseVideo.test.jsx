@@ -69,7 +69,25 @@ describe('ExerciseVideoPanel', () => {
     const video = container.querySelector('video')
     expect(video).not.toBeNull()
     expect(video.getAttribute('src')).toBe(url)
+    expect(video.getAttribute('preload')).toBe('auto')
     expect(container.textContent).toContain('Loading')
+    const overlay = container.querySelector('.exvideo-overlay.dim')
+    expect(overlay).not.toBeNull()
+  })
+
+  it('hides the loading overlay after loadedmetadata', () => {
+    act(() => {
+      root.render(
+        <ExerciseVideoPanel exerciseId="0334" exerciseName="Lateral Raise" close={() => {}} />,
+      )
+    })
+    const video = container.querySelector('video')
+    expect(video).not.toBeNull()
+    Object.defineProperty(video, 'readyState', { configurable: true, get: () => 1 })
+    act(() => {
+      video.dispatchEvent(new dom.window.Event('loadedmetadata'))
+    })
+    expect(container.querySelector('.exvideo-overlay.dim')).toBeNull()
   })
 
   it('shows playback failure copy and retry after load timeout', () => {

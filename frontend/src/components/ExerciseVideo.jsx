@@ -11,6 +11,29 @@ import {
 } from '../lib/exercise-videos.js'
 
 const LOAD_TIMEOUT_MS = 20_000
+const HAVE_METADATA = 1
+
+function videoDebugEnabled() {
+  if (import.meta.env?.DEV) return true
+  try {
+    return globalThis.localStorage?.getItem('lpVideoDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
+function logVideoDiagnostic(video, label, url) {
+  if (!videoDebugEnabled()) return
+  const err = video.error
+  const path = typeof url === 'string' ? url.replace(/^.*\/video\//, '/video/') : null
+  console.info('[MASIS-82 video]', label, {
+    path,
+    networkState: video.networkState,
+    readyState: video.readyState,
+    errorCode: err?.code ?? null,
+    errorMessage: err?.message ?? null,
+  })
+}
 
 export function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
   const url = exerciseVideoUrl(exerciseId)
@@ -28,22 +51,65 @@ export function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
 
   useEffect(() => {
     if (phase !== 'loading' || !url) return undefined
-    const timeoutId = setTimeout(() => setPhase('error'), LOAD_TIMEOUT_MS)
+    const timeoutId = setTimeout(() => {
+      const video = videoRef.current
+      if (video) logVideoDiagnostic(video, 'load-timeout', url)
+      setPhase('error')
+    }, LOAD_TIMEOUT_MS)
     return () => clearTimeout(timeoutId)
   }, [phase, url, exerciseId])
 
+  useEffect(() => {
+    if (!url) return undefined
+    const video = videoRef.current
+    if (!video) return undefined
+
+    const promoteIfBuffered = eventLabel => {
+      if (video.readyState >= HAVE_METADATA) {
+        logVideoDiagnostic(video, eventLabel, url)
+        setPhase('ready')
+      }
+    }
+
+    const onMeta = () => promoteIfBuffered('loadedmetadata')
+    const onData = () => promoteIfBuffered('loadeddata')
+    const onCanPlay = () => promoteIfBuffered('canplay')
+    const onPlaying = () => setPhase('ready')
+    const onErr = () => {
+      logVideoDiagnostic(video, 'error', url)
+      setPhase('error')
+    }
+
+    video.addEventListener('loadedmetadata', onMeta)
+    video.addEventListener('loadeddata', onData)
+    video.addEventListener('canplay', onCanPlay)
+    video.addEventListener('playing', onPlaying)
+    video.addEventListener('error', onErr)
+    promoteIfBuffered('mount-check')
+
+    return () => {
+      video.removeEventListener('loadedmetadata', onMeta)
+      video.removeEventListener('loadeddata', onData)
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('error', onErr)
+    }
+  }, [url, exerciseId])
+
   const markReady = () => setPhase('ready')
 
-  const onError = () => setPhase('error')
+  const onError = () => {
+    const video = videoRef.current
+    if (video) logVideoDiagnostic(video, 'onError', url)
+    setPhase('error')
+  }
 
   const retry = () => {
     if (!url) return
     setPhase('loading')
     const video = videoRef.current
     if (!video) return
-    if (!video.getAttribute('src')) {
-      video.src = url
-    }
+    video.src = url
     video.load()
   }
 
@@ -67,13 +133,17 @@ export function ExerciseVideoPanel({ exerciseId, exerciseName, close }) {
               src={url}
               controls
               playsInline
-              preload="metadata"
+              preload="auto"
+              onLoadedMetadata={markReady}
               onLoadedData={markReady}
               onCanPlay={markReady}
+              onPlaying={markReady}
               onError={onError}
               data-nodrag
             />
-            {phase === 'loading' && <div className="exvideo-overlay dim">{t('Loading…')}</div>}
+            {phase === 'loading' && (
+              <div className="exvideo-overlay dim" aria-hidden="true">{t('Loading…')}</div>
+            )}
             {phase === 'error' && (
               <div className="exvideo-overlay">
                 <p className="exvideo-msg">{EXERCISE_VIDEO_LOAD_FAILED}</p>

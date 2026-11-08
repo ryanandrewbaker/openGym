@@ -550,7 +550,8 @@ h4.sec{
 .exvideo-frame{position:relative;border-radius:var(--r-lg);overflow:hidden;background:#000;margin:8px 0 4px}
 .exvideo-player{width:100%;max-height:min(60vh,420px);display:block;background:#000}
 .exvideo-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(0,0,0,.55);padding:16px;text-align:center}
-.exvideo-overlay.dim{color:#fff;font-size:14px;font-weight:500}
+/* Let native <video controls> receive taps while the loading hint is visible (iOS WKWebView). */
+.exvideo-overlay.dim{pointer-events:none;color:#fff;font-size:14px;font-weight:500}
 .exvideo-msg{margin:12px 0;color:var(--label-2);font-size:15px;line-height:1.35;text-align:center}
 
 .sethead{
