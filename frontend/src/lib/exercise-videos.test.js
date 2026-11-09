@@ -25,10 +25,14 @@ describe('exerciseVideoUrl', () => {
   it('returns null when technique is not verified even if owner approved', () => {
     expect(exerciseVideoUrl('0416')).toBeNull()
     expect(exerciseVideoEligible('0416')).toBe(false)
-    expect(exerciseVideoUrl('1731')).toBeNull()
-    expect(exerciseVideoEligible('1731')).toBe(false)
     expect(exerciseVideoUrl('2188')).toBeNull()
+    expect(exerciseVideoEligible('2188')).toBe(false)
     expect(exerciseVideoUrl('9999')).toBeNull()
+  })
+
+  it('resolves flat close-grip press video when technique is verified (1731)', () => {
+    expect(exerciseVideoUrl('1731')).toBe('/video/77362308dead6bb5.mp4')
+    expect(exerciseVideoEligible('1731')).toBe(true)
   })
 
   it('builds opaque /video/ URLs when both gates pass', () => {

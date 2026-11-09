@@ -13,8 +13,7 @@ export const EXERCISE_VIDEO_CATALOG = {
   '0313': { token: 'b7800df2fb0a2dcf', sourceFile: 'Alternating Dumbbell Hammer Curls.mp4', techniqueVerified: true, ownerApprovedForUse: true },
   cmuzc4mt1e05wo: { token: '23887cd0aea762d3', sourceFile: 'Dumbbell Hammer Curls.mp4', techniqueVerified: false, ownerApprovedForUse: true },
   '0289': { token: 'e410eb7d174ebe75', sourceFile: 'Dumbbell Chest Press.mp4', techniqueVerified: true, ownerApprovedForUse: true },
-  // Incline clip; catalogue 1731 is flat close-grip press — keep mapped for remapping, not playback.
-  '1731': { token: '77362308dead6bb5', sourceFile: 'CLOSE GRIP DUMBBELL PRESS.mp4', techniqueVerified: false, ownerApprovedForUse: true },
+  '1731': { token: '77362308dead6bb5', sourceFile: 'CLOSE GRIP DUMBBELL PRESS.mp4', techniqueVerified: true, ownerApprovedForUse: true },
   '0381': { token: 'bd7ab00f885bdeb4', sourceFile: 'Dumbbell Reverse Lunges.mp4', techniqueVerified: true, ownerApprovedForUse: true },
   '1459': { token: '17f4c11aaed8c9ce', sourceFile: 'How to do a Dumbbell RDL ⧸ Romanian Deadlift.mp4', techniqueVerified: true, ownerApprovedForUse: true },
   '0319': { token: '7cbbab95ea52ee86', sourceFile: 'How To Do An Incline Dumbbell Fly.mp4', techniqueVerified: true, ownerApprovedForUse: true },
