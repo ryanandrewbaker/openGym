@@ -101,11 +101,52 @@ export function notifyLpExerciseSelected(exerciseId) {
 let lastPaintedCursor = null
 let lastPaintedRevision = -1
 let lastPaintedSessionId = null
+let attachedEngineSessionId = null
+let attachedExternalSessionId = null
+
+function executionBindingIdentity() {
+  return attachedEngineSessionId || attachedExternalSessionId || null
+}
+
+function snapshotMatchesAttached(snapshot) {
+  if (!executionBindingIdentity()) return true
+  const engine = snapshot.sessionId != null ? String(snapshot.sessionId) : null
+  const external = snapshot.externalSessionId != null ? String(snapshot.externalSessionId) : null
+  if (attachedEngineSessionId && (engine === attachedEngineSessionId || external === attachedEngineSessionId)) {
+    return true
+  }
+  if (attachedExternalSessionId && (external === attachedExternalSessionId || engine === attachedExternalSessionId)) {
+    return true
+  }
+  return false
+}
+
+/** Bind canonical paints to one execution session (engine and/or OpenGym external id). */
+export function bindLpCanonicalExecutionSession(snapshotOrExternalId) {
+  if (!snapshotOrExternalId) return
+  const prevBinding = executionBindingIdentity()
+  if (typeof snapshotOrExternalId === 'string') {
+    attachedExternalSessionId = snapshotOrExternalId
+  } else {
+    if (snapshotOrExternalId.sessionId) attachedEngineSessionId = String(snapshotOrExternalId.sessionId)
+    if (snapshotOrExternalId.externalSessionId) {
+      attachedExternalSessionId = String(snapshotOrExternalId.externalSessionId)
+    }
+  }
+  const nextBinding = executionBindingIdentity()
+  if (prevBinding && nextBinding && prevBinding !== nextBinding) {
+    lastPaintedCursor = null
+    lastPaintedRevision = -1
+    lastPaintedSessionId = null
+  }
+}
 
 export function resetLpExecutionPaintState() {
   lastPaintedCursor = null
   lastPaintedRevision = -1
   lastPaintedSessionId = null
+  attachedEngineSessionId = null
+  attachedExternalSessionId = null
 }
 
 export function isApplyingRemoteSnapshot() {
@@ -114,11 +155,9 @@ export function isApplyingRemoteSnapshot() {
 
 export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, stopRest }) {
   if (!snapshot || typeof update !== 'function') return
-  const sessionId = snapshot.sessionId ?? snapshot.externalSessionId ?? null
-  if (sessionId && sessionId !== lastPaintedSessionId) {
-    lastPaintedSessionId = String(sessionId)
-    lastPaintedRevision = -1
-  }
+  if (!snapshotMatchesAttached(snapshot)) return
+  bindLpCanonicalExecutionSession(snapshot)
+  const paintSessionKey = String(snapshot.sessionId ?? snapshot.externalSessionId ?? '')
   const revision = snapshot.cursor?.revision
   if (Number.isInteger(revision) && revision < lastPaintedRevision) {
     return
@@ -155,7 +194,7 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
         const entryIndex = planExercise
           ? active.entries.findIndex((item) => String(item.id) === String(planExercise.exerciseId))
           : exerciseIndex
-        const sessionId = String(snapshot.sessionId || snapshot.externalSessionId || '')
+        const sessionId = paintSessionKey
         const cursorMoved = !lastPaintedCursor
           || lastPaintedCursor.sessionId !== sessionId
           || lastPaintedCursor.exerciseIndex !== exerciseIndex
@@ -169,6 +208,7 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
       }
     }, false)
     reconcileRestFromSnapshot(snapshot, { startRest, stopRest })
+    if (paintSessionKey) lastPaintedSessionId = paintSessionKey
     if (Number.isInteger(revision)) {
       lastPaintedRevision = Math.max(lastPaintedRevision, revision)
     }

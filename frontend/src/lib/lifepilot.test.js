@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyCanonicalExecutionSnapshot,
+  bindLpCanonicalExecutionSession,
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
   isApplyingRemoteSnapshot,
@@ -11,6 +12,7 @@ import {
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
   requestLifePilotExit,
+  resetLpExecutionPaintState,
   workoutFinishedPayload,
   workoutStartedPayload,
 } from "./lifepilot-workout-bridge.js";
@@ -30,6 +32,7 @@ function stubLpContext(context) {
 describe("LifePilot workout lifecycle bridge", () => {
   beforeEach(() => {
     memory.clear();
+    resetLpExecutionPaintState();
     vi.stubGlobal("sessionStorage", sessionStorageStub);
   });
 
@@ -317,6 +320,7 @@ describe("LifePilot workout lifecycle bridge", () => {
     const bench = { id: "bench", sets: [{ w: 34, r: 8, done: true }, { w: 34, r: 8, done: false }] };
     const row = { id: "row", sets: [{ w: 22, r: 10, done: true }, { w: 22, r: 10, done: false }] };
     const state = { active: { entries: [bench, row], cur: 0 } };
+    bindLpCanonicalExecutionSession("session-rewind");
     const apply = (snapshot) => applyCanonicalExecutionSnapshot(snapshot, {
       update: (mut) => mut(state),
       startRest: () => {},

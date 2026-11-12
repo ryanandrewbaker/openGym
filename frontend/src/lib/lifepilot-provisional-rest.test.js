@@ -7,7 +7,11 @@ import {
   reconcileRestFromSnapshot,
   resetLpProvisionalRestState,
 } from "./lifepilot-provisional-rest.js";
-import { resetLpExecutionPaintState } from "./lifepilot-workout-bridge.js";
+import {
+  applyCanonicalExecutionSnapshot,
+  bindLpCanonicalExecutionSession,
+  resetLpExecutionPaintState,
+} from "./lifepilot-workout-bridge.js";
 describe("lifepilot provisional rest (unit)", () => {
   const sessionStore = {};
 
@@ -148,6 +152,7 @@ describe("lifepilot provisional rest (useUI integration)", () => {
   beforeEach(() => {
     resetLpProvisionalRestState();
     resetLpExecutionPaintState();
+    bindLpCanonicalExecutionSession("lp-sess-118");
     useUI.setState({ timer: null, work: null });
     vi.stubGlobal("sessionStorage", {
       getItem: (key) => sessionStore[key] ?? null,
@@ -178,7 +183,7 @@ describe("lifepilot provisional rest (useUI integration)", () => {
     }],
   });
 
-  const session = { sessionId: "lp-sess-118" };
+  const session = { sessionId: "engine-118", externalSessionId: "lp-sess-118" };
 
   const apply = (snapshot, state) => {
     applyCanonicalExecutionSnapshot({ ...session, ...snapshot }, {
@@ -418,5 +423,189 @@ describe("lifepilot provisional rest (useUI integration)", () => {
       cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 10 },
     }, state);
     expect(useUI.getState().timer).toBeNull();
+  });
+});
+
+describe("lifepilot skip-rest emissions (useUI)", () => {
+  const sessionStore = {};
+  let useUI;
+
+  beforeAll(async () => {
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      body: { classList: { toggle: vi.fn(), remove: vi.fn() } },
+      hidden: false,
+      visibilityState: "visible",
+    });
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    ({ useUI } = await import("../store/useUI.js"));
+  });
+
+  beforeEach(() => {
+    resetLpProvisionalRestState();
+    resetLpExecutionPaintState();
+    useUI.setState({ timer: null, work: null });
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key) => sessionStore[key] ?? null,
+      setItem: (key, value) => { sessionStore[key] = String(value); },
+      removeItem: (key) => { delete sessionStore[key]; },
+      clear: () => { Object.keys(sessionStore).forEach((key) => delete sessionStore[key]); },
+    });
+    sessionStorage.setItem("lp_context", JSON.stringify({ mode: "workout" }));
+  });
+
+  afterEach(() => {
+    useUI.getState().stopRest({ reason: "internal" });
+    Object.keys(sessionStore).forEach((key) => delete sessionStore[key]);
+  });
+
+  const postMessage = () => {
+    const handler = vi.fn();
+    vi.stubGlobal("window", {
+      parent: { postMessage: vi.fn() },
+      webkit: { messageHandlers: { lifepilot: { postMessage: handler } } },
+    });
+    return handler;
+  };
+
+  it("does not emit skip-rest on default stopRest (workout start/finish/exit cleanup)", () => {
+    const handler = postMessage();
+    useUI.getState().startRest(90);
+    handler.mockClear();
+    useUI.getState().stopRest();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not emit skip-rest on internal replacement or natural expiry", () => {
+    const handler = postMessage();
+    useUI.getState().startRest(90);
+    expect(handler).not.toHaveBeenCalled();
+    useUI.getState().startRest(60);
+    expect(handler).not.toHaveBeenCalled();
+    useUI.getState().stopRest({ reason: "expired" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("emits skip-rest for explicit user skip and subtract-to-zero", () => {
+    const handler = postMessage();
+    useUI.getState().startRest(10);
+    handler.mockClear();
+    useUI.getState().stopRest({ reason: "user" });
+    expect(handler).toHaveBeenCalledWith({ type: "lifepilot-skip-rest" });
+    useUI.getState().startRest(10);
+    handler.mockClear();
+    useUI.getState().addRest(-15);
+    expect(handler).toHaveBeenCalledWith({ type: "lifepilot-skip-rest" });
+  });
+});
+
+describe("lifepilot canonical paint session guard", () => {
+  const sessionStore = {};
+  let useUI;
+
+  beforeAll(async () => {
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      body: { classList: { toggle: vi.fn(), remove: vi.fn() } },
+      hidden: false,
+      visibilityState: "visible",
+    });
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    ({ useUI } = await import("../store/useUI.js"));
+  });
+
+  beforeEach(() => {
+    resetLpProvisionalRestState();
+    resetLpExecutionPaintState();
+    useUI.setState({ timer: null, work: null });
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key) => sessionStore[key] ?? null,
+      setItem: (key, value) => { sessionStore[key] = String(value); },
+      removeItem: (key) => { delete sessionStore[key]; },
+      clear: () => { Object.keys(sessionStore).forEach((key) => delete sessionStore[key]); },
+    });
+    sessionStorage.setItem("lp_context", JSON.stringify({ mode: "workout" }));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-12T10:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    useUI.getState().stopRest({ reason: "internal" });
+    vi.useRealTimers();
+    Object.keys(sessionStore).forEach((key) => delete sessionStore[key]);
+  });
+
+  it("ignores delayed snapshots from a prior session after binding to a new one", () => {
+    const state = {
+      active: {
+        cur: 0,
+        entries: [
+          { id: "bench", sets: [{ w: 34, r: 8, done: false }, { w: 34, r: 8, done: false }] },
+          { id: "row", sets: [{ w: 22, r: 10, done: false }] },
+        ],
+      },
+    };
+    const apply = (snapshot) => applyCanonicalExecutionSnapshot(snapshot, {
+      update: (mut) => mut(state),
+      ...useUI.getState(),
+    });
+
+    bindLpCanonicalExecutionSession({ sessionId: "engine-B", externalSessionId: "ext-B" });
+    apply({
+      sessionId: "engine-B",
+      externalSessionId: "ext-B",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [{ exerciseId: "bench", sets: [{ setNumber: 1, weightKg: 34, reps: 8, completed: true }] }],
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 4, exerciseIndex: 0, setIndex: 1 },
+    });
+    expect(state.active.entries[0].sets[0].done).toBe(true);
+    expect(state.active.cur).toBe(0);
+    expect(useUI.getState().timer?.left).toBe(90);
+
+    apply({
+      sessionId: "engine-A",
+      externalSessionId: "ext-A",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [{ exerciseId: "row", sets: [{ setNumber: 1, weightKg: 99, reps: 5, completed: true }] }],
+      cursor: { phase: "setReady", exerciseIndex: 1, setIndex: 0, revision: 99 },
+    });
+    expect(state.active.cur).toBe(0);
+    expect(state.active.entries[1].sets[0].done).toBe(false);
+    expect(state.active.entries[1].sets[0].w).not.toBe(99);
+    expect(useUI.getState().timer?.left).toBe(90);
+  });
+
+  it("rebinds paint state when beginWorkout switches external session id", () => {
+    bindLpCanonicalExecutionSession("ext-A");
+    bindLpCanonicalExecutionSession("ext-B");
+    const state = { active: { cur: 0, entries: [{ id: "bench", sets: [{ w: 34, r: 8, done: false }] }] } };
+    applyCanonicalExecutionSnapshot({
+      sessionId: "engine-A",
+      externalSessionId: "ext-A",
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:05:00.000Z", revision: 50 },
+    }, {
+      update: (mut) => mut(state),
+      ...useUI.getState(),
+    });
+    expect(useUI.getState().timer).toBeNull();
+    applyCanonicalExecutionSnapshot({
+      sessionId: "engine-B",
+      externalSessionId: "ext-B",
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:00.000Z", revision: 1 },
+    }, {
+      update: (mut) => mut(state),
+      ...useUI.getState(),
+    });
+    expect(useUI.getState().timer?.left).toBe(60);
   });
 });

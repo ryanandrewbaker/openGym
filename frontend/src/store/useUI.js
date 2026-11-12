@@ -119,7 +119,7 @@ export const useUI = create((set, get) => ({
     pushRestTimer(left)
   },
   stopRest(opts = {}) {
-    const reason = opts.reason ?? 'user'
+    const reason = opts?.reason ?? 'internal'
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
