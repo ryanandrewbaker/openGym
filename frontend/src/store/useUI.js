@@ -5,6 +5,7 @@ import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { useStore } from './useStore.js'
 import { isLpWorkoutMode, notifyLpWebOverlay } from '../lib/lifepilot.js'
+import { onLpUserSkippedRest } from '../lib/lifepilot-provisional-rest.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
 // before the local timer completes. No-ops for guests / offline.
@@ -121,6 +122,7 @@ export const useUI = create((set, get) => ({
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
+    onLpUserSkippedRest()
     set({ timer: null })
   },
 

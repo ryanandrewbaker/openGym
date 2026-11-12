@@ -16,6 +16,7 @@ import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { equipmentForExercise, loadsInUnit, stepAvailableLoad } from '../lib/equipment.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { isLpWorkoutMode, notifyLpWorkoutLeft, notifyLpSetChanged, notifyLpSelectionChanged, notifyLpExerciseSelected, applyCanonicalExecutionSnapshot, isApplyingRemoteSnapshot, workSetNumber, requestLifePilotExit, notifyLpExecutionReady } from '../lib/lifepilot.js'
+import { onLpLocalSetCompletion } from '../lib/lifepilot-provisional-rest.js'
 import { isStaleActiveWorkout, logWorkoutSession } from '../lib/active-workout-session.js'
 import { discardActiveWorkout, finishWorkoutAt } from '../sheets.jsx'
 
@@ -271,18 +272,26 @@ function ActiveWorkout() {
       }
     })
     if (isLpWorkoutMode() && !isApplyingRemoteSnapshot()) {
-      const entry = useStore.getState().S.active?.entries?.[idx]
+      const active = useStore.getState().S.active
+      const entry = active?.entries?.[idx]
       const set = entry?.sets?.[i]
       if (entry && set && !set.warmup) {
+        const completed = !!set.done
         notifyLpSetChanged({
           exerciseId: String(entry.id),
           setNumber: workSetNumber(entry, i),
           loadKg: set.w ?? null,
           reps: set.r ?? null,
-          completed: !!set.done,
+          completed,
           updatedAt: new Date().toISOString(),
           updatedBy: 'opengym',
         })
+        onLpLocalSetCompletion(active, {
+          entryIdx: idx,
+          setIdx: i,
+          completed,
+          warmup: !!set.warmup,
+        }, { startRest, stopRest })
       }
     }
     // reps: topWeight first (it chains into the finish/continue prompt on the last unit).

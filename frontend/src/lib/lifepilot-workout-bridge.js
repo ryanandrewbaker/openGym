@@ -1,3 +1,5 @@
+import { reconcileRestFromSnapshot } from './lifepilot-provisional-rest.js'
+
 const LP_CTX_KEY = 'lp_context'
 
 function isLpWorkoutMode() {
@@ -97,7 +99,6 @@ export function notifyLpExerciseSelected(exerciseId) {
 }
 
 let lastPaintedCursor = null
-let lastPaintedRestEndsAt = null
 
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
@@ -150,20 +151,7 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
         }
       }
     }, false)
-    const restEndsAt = snapshot.cursor?.restEndsAt
-    if (snapshot.cursor?.phase === 'rest' && restEndsAt && typeof startRest === 'function') {
-      const remaining = Math.max(0, Math.ceil((Date.parse(restEndsAt) - Date.now()) / 1000))
-      if (lastPaintedRestEndsAt !== restEndsAt) {
-        lastPaintedRestEndsAt = restEndsAt
-        if (remaining > 0) startRest(remaining)
-        else if (typeof stopRest === 'function') stopRest()
-      } else if (remaining <= 0 && typeof stopRest === 'function') {
-        stopRest()
-      }
-    } else {
-      lastPaintedRestEndsAt = null
-      if (typeof stopRest === 'function' && snapshot.cursor?.phase !== 'rest') stopRest()
-    }
+    reconcileRestFromSnapshot(snapshot, { startRest, stopRest })
   } finally {
     applyingRemoteSnapshot = false
   }

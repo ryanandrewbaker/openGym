@@ -21,6 +21,10 @@ import {
 } from './lifepilot-workout-bridge.js'
 
 export {
+  resetLpProvisionalRestState,
+} from './lifepilot-provisional-rest.js'
+
+export {
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
   notifyLpWorkoutDiscarded,
