@@ -10,6 +10,10 @@ let canonicalRestPolicy = {
 let provisionalGeneration = 0
 let provisionalActive = false
 let lastAuthoritativeRestEndsAt = null
+/** User explicitly skipped; same `restEndsAt` must not reopen from duplicate/late snapshots. */
+let dismissedRestEndsAt = null
+/** Provisional was skipped before any authoritative `restEndsAt` arrived. */
+let dismissProvisionalRestPending = false
 
 function isLpWorkoutMode() {
   try {
@@ -28,6 +32,8 @@ export function resetLpProvisionalRestState() {
   provisionalGeneration = 0
   provisionalActive = false
   lastAuthoritativeRestEndsAt = null
+  dismissedRestEndsAt = null
+  dismissProvisionalRestPending = false
 }
 
 export function cacheCanonicalRestPolicy(snapshot) {
@@ -44,11 +50,37 @@ export function isProvisionalRestActive() {
   return provisionalActive
 }
 
+export function getLpRestReconcileState() {
+  return {
+    provisionalActive,
+    lastAuthoritativeRestEndsAt,
+    dismissedRestEndsAt,
+    dismissProvisionalRestPending,
+  }
+}
+
+/** Explicit user Skip (not internal timer replacement or natural expiry). */
 export function onLpUserSkippedRest() {
   if (!isLpWorkoutMode()) return
   provisionalActive = false
   provisionalGeneration += 1
-  lastAuthoritativeRestEndsAt = null
+  if (lastAuthoritativeRestEndsAt) {
+    dismissedRestEndsAt = lastAuthoritativeRestEndsAt
+  } else {
+    dismissProvisionalRestPending = true
+  }
+}
+
+export function onLpRestTimerExpired() {
+  if (!isLpWorkoutMode()) return
+  provisionalActive = false
+}
+
+function clearDismissalForNewRestPeriod(restEndsAt) {
+  if (dismissedRestEndsAt && restEndsAt !== dismissedRestEndsAt) {
+    dismissedRestEndsAt = null
+    dismissProvisionalRestPending = false
+  }
 }
 
 function workoutHasRemainingWork(active) {
@@ -71,21 +103,28 @@ export function estimateProvisionalRestSeconds(active, entryIdx, setIdx) {
   return canonicalRestPolicy.betweenExercises
 }
 
+function stopRestInternal(stopRest) {
+  if (typeof stopRest === 'function') stopRest({ reason: 'internal' })
+}
+
 export function onLpLocalSetCompletion(active, { entryIdx, setIdx, completed, warmup }, { startRest, stopRest }) {
   if (!isLpWorkoutMode() || typeof startRest !== 'function') return
   if (warmup) return
 
   if (!completed) {
-    if (provisionalActive && typeof stopRest === 'function') stopRest()
+    if (provisionalActive) stopRestInternal(stopRest)
     provisionalActive = false
     provisionalGeneration += 1
     return
   }
 
+  dismissedRestEndsAt = null
+  dismissProvisionalRestPending = false
+
   const seconds = estimateProvisionalRestSeconds(active, entryIdx, setIdx)
   if (seconds <= 0) {
     provisionalActive = false
-    if (typeof stopRest === 'function') stopRest()
+    stopRestInternal(stopRest)
     return
   }
 
@@ -100,6 +139,20 @@ export function reconcileRestFromSnapshot(snapshot, { startRest, stopRest }) {
   const restEndsAt = snapshot?.cursor?.restEndsAt
 
   if (phase === 'rest' && restEndsAt) {
+    clearDismissalForNewRestPeriod(restEndsAt)
+    if (restEndsAt === dismissedRestEndsAt) {
+      provisionalActive = false
+      return
+    }
+    if (dismissProvisionalRestPending) {
+      dismissProvisionalRestPending = false
+      dismissedRestEndsAt = restEndsAt
+      lastAuthoritativeRestEndsAt = restEndsAt
+      provisionalActive = false
+      stopRestInternal(stopRest)
+      return
+    }
+
     const remaining = Math.max(0, Math.ceil((Date.parse(restEndsAt) - Date.now()) / 1000))
     const restEndsAtChanged = lastAuthoritativeRestEndsAt !== restEndsAt
     const needsAuthoritativeSync = restEndsAtChanged || provisionalActive
@@ -108,14 +161,19 @@ export function reconcileRestFromSnapshot(snapshot, { startRest, stopRest }) {
       lastAuthoritativeRestEndsAt = restEndsAt
       provisionalActive = false
       if (typeof startRest === 'function' && remaining > 0) startRest(remaining)
-      else if (typeof stopRest === 'function') stopRest()
-    } else if (remaining <= 0 && typeof stopRest === 'function') {
-      stopRest()
+      else stopRestInternal(stopRest)
+    } else if (remaining <= 0) {
+      stopRestInternal(stopRest)
     }
     return
   }
 
   lastAuthoritativeRestEndsAt = null
   provisionalActive = false
-  if (typeof stopRest === 'function' && phase !== 'rest') stopRest()
+  if (phase !== 'rest' && phase !== 'complete') {
+    dismissProvisionalRestPending = false
+  }
+  if (typeof stopRest === 'function' && phase !== 'rest') {
+    stopRestInternal(stopRest)
+  }
 }
