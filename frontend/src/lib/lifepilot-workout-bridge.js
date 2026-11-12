@@ -99,6 +99,14 @@ export function notifyLpExerciseSelected(exerciseId) {
 }
 
 let lastPaintedCursor = null
+let lastPaintedRevision = -1
+let lastPaintedSessionId = null
+
+export function resetLpExecutionPaintState() {
+  lastPaintedCursor = null
+  lastPaintedRevision = -1
+  lastPaintedSessionId = null
+}
 
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
@@ -106,6 +114,15 @@ export function isApplyingRemoteSnapshot() {
 
 export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, stopRest }) {
   if (!snapshot || typeof update !== 'function') return
+  const sessionId = snapshot.sessionId ?? snapshot.externalSessionId ?? null
+  if (sessionId && sessionId !== lastPaintedSessionId) {
+    lastPaintedSessionId = String(sessionId)
+    lastPaintedRevision = -1
+  }
+  const revision = snapshot.cursor?.revision
+  if (Number.isInteger(revision) && revision < lastPaintedRevision) {
+    return
+  }
   applyingRemoteSnapshot = true
   try {
     update((state) => {
@@ -152,6 +169,9 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
       }
     }, false)
     reconcileRestFromSnapshot(snapshot, { startRest, stopRest })
+    if (Number.isInteger(revision)) {
+      lastPaintedRevision = Math.max(lastPaintedRevision, revision)
+    }
   } finally {
     applyingRemoteSnapshot = false
   }

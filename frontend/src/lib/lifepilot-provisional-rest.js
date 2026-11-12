@@ -69,6 +69,18 @@ export function onLpUserSkippedRest() {
   } else {
     dismissProvisionalRestPending = true
   }
+  notifyLpSkipRest()
+}
+
+function notifyLpSkipRest() {
+  if (typeof window === 'undefined') return
+  const payload = { type: 'lifepilot-skip-rest' }
+  if (window.parent !== window) {
+    window.parent.postMessage(payload, '*')
+  }
+  if (window.webkit?.messageHandlers?.lifepilot) {
+    window.webkit.messageHandlers.lifepilot.postMessage(payload)
+  }
 }
 
 export function onLpRestTimerExpired() {
@@ -170,7 +182,10 @@ export function reconcileRestFromSnapshot(snapshot, { startRest, stopRest }) {
 
   lastAuthoritativeRestEndsAt = null
   provisionalActive = false
-  if (phase !== 'rest' && phase !== 'complete') {
+  if (phase === 'setReady') {
+    dismissedRestEndsAt = null
+    dismissProvisionalRestPending = false
+  } else if (phase !== 'rest' && phase !== 'complete') {
     dismissProvisionalRestPending = false
   }
   if (typeof stopRest === 'function' && phase !== 'rest') {

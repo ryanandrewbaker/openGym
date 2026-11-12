@@ -7,11 +7,13 @@ import {
   reconcileRestFromSnapshot,
   resetLpProvisionalRestState,
 } from "./lifepilot-provisional-rest.js";
+import { resetLpExecutionPaintState } from "./lifepilot-workout-bridge.js";
 describe("lifepilot provisional rest (unit)", () => {
   const sessionStore = {};
 
   beforeEach(() => {
     resetLpProvisionalRestState();
+    resetLpExecutionPaintState();
     vi.stubGlobal("sessionStorage", {
       getItem: (key) => sessionStore[key] ?? null,
       setItem: (key, value) => { sessionStore[key] = String(value); },
@@ -94,6 +96,16 @@ describe("lifepilot provisional rest (unit)", () => {
     expect(getLpRestReconcileState().dismissedRestEndsAt).toBe("2026-11-12T10:01:30.000Z");
   });
 
+  it("posts lifepilot-skip-rest when the user explicitly skips rest", () => {
+    const postMessage = vi.fn();
+    vi.stubGlobal("window", {
+      parent: { postMessage: vi.fn() },
+      webkit: { messageHandlers: { lifepilot: { postMessage } } },
+    });
+    onLpUserSkippedRest();
+    expect(postMessage).toHaveBeenCalledWith({ type: "lifepilot-skip-rest" });
+  });
+
   it("uses between-exercise rest when the current exercise is finished", () => {
     reconcileRestFromSnapshot({
       restBetweenSetsSeconds: 60,
@@ -114,6 +126,7 @@ describe("lifepilot provisional rest (useUI integration)", () => {
   const sessionStore = {};
   let useUI;
   let applyCanonicalExecutionSnapshot;
+  let resetLpExecutionPaintState;
 
   beforeAll(async () => {
     vi.stubGlobal("document", {
@@ -129,11 +142,12 @@ describe("lifepilot provisional rest (useUI integration)", () => {
       removeItem: () => {},
     });
     ({ useUI } = await import("../store/useUI.js"));
-    ({ applyCanonicalExecutionSnapshot } = await import("./lifepilot-workout-bridge.js"));
+    ({ applyCanonicalExecutionSnapshot, resetLpExecutionPaintState } = await import("./lifepilot-workout-bridge.js"));
   });
 
   beforeEach(() => {
     resetLpProvisionalRestState();
+    resetLpExecutionPaintState();
     useUI.setState({ timer: null, work: null });
     vi.stubGlobal("sessionStorage", {
       getItem: (key) => sessionStore[key] ?? null,
@@ -164,8 +178,10 @@ describe("lifepilot provisional rest (useUI integration)", () => {
     }],
   });
 
+  const session = { sessionId: "lp-sess-118" };
+
   const apply = (snapshot, state) => {
-    applyCanonicalExecutionSnapshot(snapshot, {
+    applyCanonicalExecutionSnapshot({ ...session, ...snapshot }, {
       update: (mut) => mut(state),
       ...timers(),
     });
@@ -300,16 +316,107 @@ describe("lifepilot provisional rest (useUI integration)", () => {
   it("out-of-order setReady stops rest before a later rest snapshot applies", () => {
     const state = { active: benchActive() };
     apply({
-      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z" },
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 4 },
     }, state);
     expect(useUI.getState().timer).not.toBeNull();
     apply({
-      cursor: { phase: "setReady", restEndsAt: null },
+      cursor: { phase: "setReady", restEndsAt: null, revision: 5 },
     }, state);
     expect(useUI.getState().timer).toBeNull();
     apply({
-      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:05:00.000Z" },
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:05:00.000Z", revision: 8 },
     }, state);
     expect(useUI.getState().timer?.left).toBe(300);
+  });
+
+  it("user skip emits bridge skip and canonical setReady allows the next working set before restEndsAt", () => {
+    const postMessage = vi.fn();
+    vi.stubGlobal("window", {
+      parent: { postMessage: vi.fn() },
+      webkit: { messageHandlers: { lifepilot: { postMessage } } },
+    });
+    const state = {
+      active: {
+        entries: [{
+          id: "bench",
+          sets: [
+            { w: 34, r: 8, done: true },
+            { w: 34, r: 8, done: false },
+            { w: 34, r: 8, done: false },
+          ],
+        }],
+      },
+    };
+    onLpLocalSetCompletion(state.active, {
+      entryIdx: 0,
+      setIdx: 0,
+      completed: true,
+      warmup: false,
+    }, timers());
+    apply({
+      cursor: {
+        phase: "rest",
+        restEndsAt: "2026-11-12T10:01:30.000Z",
+        revision: 3,
+        exerciseIndex: 0,
+        setIndex: 1,
+      },
+    }, state);
+    useUI.getState().stopRest({ reason: "user" });
+    expect(postMessage).toHaveBeenCalledWith({ type: "lifepilot-skip-rest" });
+    expect(useUI.getState().timer).toBeNull();
+    apply({
+      cursor: {
+        phase: "setReady",
+        restEndsAt: null,
+        revision: 4,
+        exerciseIndex: 0,
+        setIndex: 1,
+      },
+    }, state);
+    expect(getLpRestReconcileState().dismissedRestEndsAt).toBeNull();
+    vi.setSystemTime(new Date("2026-11-12T10:00:20.000Z"));
+    state.active.entries[0].sets[1].done = true;
+    onLpLocalSetCompletion(state.active, {
+      entryIdx: 0,
+      setIdx: 1,
+      completed: true,
+      warmup: false,
+    }, timers());
+    expect(useUI.getState().timer?.left).toBe(90);
+  });
+
+  it("rejects stale rest snapshots by revision after skipRest setReady was applied", () => {
+    const state = { active: benchActive() };
+    apply({
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 6 },
+    }, state);
+    useUI.getState().stopRest({ reason: "user" });
+    apply({
+      cursor: { phase: "setReady", restEndsAt: null, revision: 7 },
+    }, state);
+    expect(useUI.getState().timer).toBeNull();
+    apply({
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 6 },
+    }, state);
+    expect(useUI.getState().timer).toBeNull();
+  });
+
+  it("duplicate setReady snapshots at the same revision do not regress paint state", () => {
+    const state = { active: benchActive() };
+    apply({
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 10 },
+    }, state);
+    apply({
+      cursor: { phase: "setReady", restEndsAt: null, revision: 11 },
+    }, state);
+    apply({
+      cursor: { phase: "setReady", restEndsAt: null, revision: 11 },
+    }, state);
+    expect(useUI.getState().timer).toBeNull();
+    apply({
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:30.000Z", revision: 10 },
+    }, state);
+    expect(useUI.getState().timer).toBeNull();
   });
 });
