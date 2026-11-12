@@ -282,6 +282,37 @@ describe("LifePilot workout lifecycle bridge", () => {
     expect(bench.sets[1].done).toBe(true);
   });
 
+  it("restarts the rest timer when a new restEndsAt arrives", () => {
+    const startRest = vi.fn();
+    const stopRest = vi.fn();
+  const bench = { id: "bench", sets: [{ w: 34, r: 8, done: true }, { w: 34, r: 8, done: false }] };
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "session-rest",
+        cursor: { phase: "rest", restEndsAt: "2099-01-01T00:01:00.000Z" },
+      },
+      {
+        update: (mut) => mut({ active: { entries: [bench] } }),
+        startRest,
+        stopRest,
+      },
+    );
+    expect(startRest).toHaveBeenCalledTimes(1);
+    startRest.mockClear();
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "session-rest",
+        cursor: { phase: "rest", restEndsAt: "2099-01-01T00:02:00.000Z" },
+      },
+      {
+        update: (mut) => mut({ active: { entries: [bench] } }),
+        startRest,
+        stopRest,
+      },
+    );
+    expect(startRest).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the open exercise when a later set is logged and the canonical cursor is still on the first exercise", () => {
     const bench = { id: "bench", sets: [{ w: 34, r: 8, done: true }, { w: 34, r: 8, done: false }] };
     const row = { id: "row", sets: [{ w: 22, r: 10, done: true }, { w: 22, r: 10, done: false }] };

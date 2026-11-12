@@ -44,8 +44,9 @@ export function buildEntryFromLifePilotPrescription(cfg, prescription) {
   const target = {
     ...cfg,
     sets: setsCount,
-    reps: repsMax,
+    reps: repsMin === repsMax ? repsMin : repsMax,
     repsMin,
+    repsMax,
   };
   if (loadKg != null && Number.isFinite(loadKg)) {
     target.weight = loadKg;

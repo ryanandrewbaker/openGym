@@ -4,6 +4,7 @@ import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { useStore } from './useStore.js'
+import { isLpWorkoutMode, notifyLpWebOverlay } from '../lib/lifepilot.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
 // before the local timer completes. No-ops for guests / offline.
@@ -62,11 +63,21 @@ export const useUI = create((set, get) => ({
   openSheet(render, { kind = 'sheet', locked = false } = {}) {
     const id = uid()
     set(s => ({ sheets: [...s.sheets, { id, render, kind, locked }] }))
+    if (isLpWorkoutMode()) notifyLpWebOverlay(true)
     const close = () => get().closeSheet(id)
     return { id, close, lock: v => set(s => ({ sheets: s.sheets.map(x => x.id === id ? { ...x, locked: v } : x) })) }
   },
-  closeSheet(id) { set(s => ({ sheets: s.sheets.filter(x => x.id !== id) })) },
-  closeAll() { set({ sheets: [] }) },
+  closeSheet(id) {
+    set(s => {
+      const next = s.sheets.filter(x => x.id !== id)
+      if (isLpWorkoutMode() && next.length === 0) notifyLpWebOverlay(false)
+      return { sheets: next }
+    })
+  },
+  closeAll() {
+    if (isLpWorkoutMode()) notifyLpWebOverlay(false)
+    set({ sheets: [] })
+  },
 
   toast(msg) {
     set({ toastMsg: msg })

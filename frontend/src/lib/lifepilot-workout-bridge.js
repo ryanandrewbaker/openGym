@@ -83,6 +83,11 @@ export function notifyLpExecutionReady() {
   postLifePilotMessage({ type: 'lifepilot-execution-ready' })
 }
 
+export function notifyLpWebOverlay(open) {
+  if (!isLpWorkoutMode()) return
+  postLifePilotMessage({ type: open ? 'lifepilot-web-overlay-opened' : 'lifepilot-web-overlay-closed' })
+}
+
 export function notifyLpExerciseSelected(exerciseId) {
   if (!isLpWorkoutMode() || !exerciseId) return
   postLifePilotMessage({
@@ -92,6 +97,7 @@ export function notifyLpExerciseSelected(exerciseId) {
 }
 
 let lastPaintedCursor = null
+let lastPaintedRestEndsAt = null
 
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
@@ -147,10 +153,16 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
     const restEndsAt = snapshot.cursor?.restEndsAt
     if (snapshot.cursor?.phase === 'rest' && restEndsAt && typeof startRest === 'function') {
       const remaining = Math.max(0, Math.ceil((Date.parse(restEndsAt) - Date.now()) / 1000))
-      if (remaining > 0) startRest(remaining)
-      else if (typeof stopRest === 'function') stopRest()
-    } else if (typeof stopRest === 'function' && snapshot.cursor?.phase !== 'rest') {
-      stopRest()
+      if (lastPaintedRestEndsAt !== restEndsAt) {
+        lastPaintedRestEndsAt = restEndsAt
+        if (remaining > 0) startRest(remaining)
+        else if (typeof stopRest === 'function') stopRest()
+      } else if (remaining <= 0 && typeof stopRest === 'function') {
+        stopRest()
+      }
+    } else {
+      lastPaintedRestEndsAt = null
+      if (typeof stopRest === 'function' && snapshot.cursor?.phase !== 'rest') stopRest()
     }
   } finally {
     applyingRemoteSnapshot = false

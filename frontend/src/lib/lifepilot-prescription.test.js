@@ -99,6 +99,15 @@ describe("buildWorkoutEntries", () => {
 });
 
 describe("Coach prescription at workout start", () => {
+  it("uses the point rep target when min and max match after a load increase", () => {
+    const entry = buildEntryFromLifePilotPrescription(
+      { id: BENCH, sets: 3, reps: 12, repsMin: 8, weight: 27 },
+      { exerciseId: BENCH, sets: 3, loadKg: 29, repsMin: 8, repsMax: 8 },
+    );
+    expect(entry.sets.map((set) => set.r)).toEqual([8, 8, 8]);
+    expect(entry.target.reps).toBe(8);
+  });
+
   it("starts lateral raise at the Coach 9 kg instead of the OpenGym 7 kg", () => {
     const state = openGymState();
     const before = JSON.stringify(state.workouts);

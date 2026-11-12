@@ -248,20 +248,26 @@ function ActiveWorkout() {
     const cardioEntry = m === 'cardio'
     const isLastUnit = unitIdx >= units.length - 1
     let askTop = false, exJustDone = false, workoutDone = false
+    const lpWorkout = isLpWorkoutMode()
     mutEntry(idx, e => {
       e.sets[i].done = !e.sets[i].done
       if (e.sets[i].done) {
         beep(S.sound, 1040, 0.12); vibrate(30)
         const isLastExInUnit = idx === unit[unit.length - 1]
         const unitDone = unit.every(ui => (ui === idx ? e : A.entries[ui]).sets.every(x => x.done))
-        if (isLastExInUnit && !unitDone) startRest(S.restSec)
-        else if (unitDone) stopRest()
+        if (!lpWorkout) {
+          if (isLastExInUnit && !unitDone) startRest(S.restSec)
+          else if (unitDone) stopRest()
+        }
         if (unitDone && isLastUnit) workoutDone = true      // last exercise's last set → done
         // Only loaded reps training has a "working weight" worth confirming — a bodyweight
         // plank has nothing to put in that slider, and neither does a set of push-ups
         // (issue #32: the fewest taps that still record what happened).
         const loaded = m === 'reps' && !(isBw({ ...(e.target || {}), id: e.id }) && !e.sets.some(x => x.w > 0))
-        if (e.sets.every(x => x.done)) { exJustDone = true; if (loaded && !e.asked) { e.asked = true; askTop = true } }
+        if (e.sets.every(x => x.done)) {
+          exJustDone = true
+          if (loaded && !e.asked && !lpWorkout) { e.asked = true; askTop = true }
+        }
       }
     })
     if (isLpWorkoutMode() && !isApplyingRemoteSnapshot()) {

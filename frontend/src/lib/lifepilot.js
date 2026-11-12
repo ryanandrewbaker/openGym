@@ -17,6 +17,7 @@ import {
   requestLifePilotExit,
   notifyLpExecutionReady,
   notifyLpExerciseSelected,
+  notifyLpWebOverlay,
 } from './lifepilot-workout-bridge.js'
 
 export {
@@ -34,6 +35,7 @@ export {
   requestLifePilotExit,
   notifyLpExecutionReady,
   notifyLpExerciseSelected,
+  notifyLpWebOverlay,
 }
 
 const LP_CTX_KEY = 'lp_context'
@@ -70,6 +72,17 @@ export function isLpWorkoutMode() {
 
 export function isLpManageMode() {
   return isLpMode() && getLpMode() === 'manage'
+}
+
+export function installLifePilotEmbedHooks() {
+  if (typeof window === 'undefined') return
+  window.__lpCloseWorkoutSheets = () => {
+    try {
+      useUI.getState().closeAll()
+    } catch {
+      /* */
+    }
+  }
 }
 
 function setLpContext(context) {
@@ -139,6 +152,7 @@ export function applyLifePilotEmbedChrome() {
   document.body.classList.add('lp-embed')
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.content = '#000000'
+  installLifePilotEmbedHooks()
 }
 
 export function applyNativeEmbedBridge() {
