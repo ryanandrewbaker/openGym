@@ -1,7 +1,19 @@
 // WebAudio beeps + haptics (ported from the vanilla app). `enabled` gates sound.
 let audioCtx = null
+
+/** LifePilot embed shares the audio route with native Apple Music — avoid WebAudio there. */
+function embedDefersAudio() {
+  if (typeof window === 'undefined') return false
+  try {
+    const ctx = JSON.parse(sessionStorage.getItem('lp_context') || 'null')
+    return !!ctx && ctx.mode !== 'manage'
+  } catch {
+    return false
+  }
+}
+
 export function beep(enabled, freq, dur, when) {
-  if (!enabled) return
+  if (!enabled || embedDefersAudio()) return
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)()
     const o = audioCtx.createOscillator(), g = audioCtx.createGain()

@@ -1,3 +1,5 @@
+import { reconcileRestFromSnapshot } from './lifepilot-provisional-rest.js'
+
 const LP_CTX_KEY = 'lp_context'
 
 function isLpWorkoutMode() {
@@ -83,6 +85,11 @@ export function notifyLpExecutionReady() {
   postLifePilotMessage({ type: 'lifepilot-execution-ready' })
 }
 
+export function notifyLpWebOverlay(open) {
+  if (!isLpWorkoutMode()) return
+  postLifePilotMessage({ type: open ? 'lifepilot-web-overlay-opened' : 'lifepilot-web-overlay-closed' })
+}
+
 export function notifyLpExerciseSelected(exerciseId) {
   if (!isLpWorkoutMode() || !exerciseId) return
   postLifePilotMessage({
@@ -92,6 +99,65 @@ export function notifyLpExerciseSelected(exerciseId) {
 }
 
 let lastPaintedCursor = null
+let lastPaintedRevision = -1
+let lastPaintedSessionId = null
+let attachedEngineSessionId = null
+let attachedExternalSessionId = null
+
+function executionBindingIdentity() {
+  return attachedEngineSessionId || attachedExternalSessionId || null
+}
+
+function snapshotMatchesAttached(snapshot) {
+  if (!executionBindingIdentity()) return true
+  const engine = snapshot.sessionId != null ? String(snapshot.sessionId) : null
+  const external = snapshot.externalSessionId != null ? String(snapshot.externalSessionId) : null
+  if (attachedEngineSessionId && (engine === attachedEngineSessionId || external === attachedEngineSessionId)) {
+    return true
+  }
+  if (attachedExternalSessionId && (external === attachedExternalSessionId || engine === attachedExternalSessionId)) {
+    return true
+  }
+  return false
+}
+
+function clearLpExecutionPaintRevisionState() {
+  lastPaintedCursor = null
+  lastPaintedRevision = -1
+  lastPaintedSessionId = null
+}
+
+/** Bind canonical paints to one execution session (engine and/or OpenGym external id). */
+export function bindLpCanonicalExecutionSession(snapshotOrExternalId) {
+  if (!snapshotOrExternalId) return
+  if (typeof snapshotOrExternalId === 'string') {
+    const hadEngine = attachedEngineSessionId != null
+    const switchingExternal = attachedExternalSessionId !== snapshotOrExternalId
+    attachedExternalSessionId = snapshotOrExternalId
+    attachedEngineSessionId = null
+    if (switchingExternal || hadEngine) {
+      clearLpExecutionPaintRevisionState()
+    }
+    return
+  }
+  if (snapshotOrExternalId.externalSessionId) {
+    const external = String(snapshotOrExternalId.externalSessionId)
+    if (attachedExternalSessionId && attachedExternalSessionId !== external) {
+      attachedEngineSessionId = null
+      clearLpExecutionPaintRevisionState()
+    }
+    attachedExternalSessionId = external
+  }
+  if (snapshotOrExternalId.sessionId) {
+    attachedEngineSessionId = String(snapshotOrExternalId.sessionId)
+  }
+}
+
+export function resetLpExecutionPaintState() {
+  clearLpExecutionPaintRevisionState()
+  attachedEngineSessionId = null
+  attachedExternalSessionId = null
+}
 
 export function isApplyingRemoteSnapshot() {
   return applyingRemoteSnapshot
@@ -99,6 +165,13 @@ export function isApplyingRemoteSnapshot() {
 
 export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, stopRest }) {
   if (!snapshot || typeof update !== 'function') return
+  if (!snapshotMatchesAttached(snapshot)) return
+  bindLpCanonicalExecutionSession(snapshot)
+  const paintSessionKey = String(snapshot.sessionId ?? snapshot.externalSessionId ?? '')
+  const revision = snapshot.cursor?.revision
+  if (Number.isInteger(revision) && revision < lastPaintedRevision) {
+    return
+  }
   applyingRemoteSnapshot = true
   try {
     update((state) => {
@@ -111,6 +184,13 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
           if (set.warmup) continue
           const row = workSetAt(entry, set.setNumber)
           if (!row) continue
+          if (
+            !set.completed
+            && isFabricatedOneRepTarget(set.reps, set.weightKg)
+            && rowHasOrdinaryTarget(row)
+          ) {
+            continue
+          }
           row.done = !!set.completed
           if (set.weightKg != null) row.w = set.weightKg
           if (set.reps != null) row.r = set.reps
@@ -124,7 +204,7 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
         const entryIndex = planExercise
           ? active.entries.findIndex((item) => String(item.id) === String(planExercise.exerciseId))
           : exerciseIndex
-        const sessionId = String(snapshot.sessionId || snapshot.externalSessionId || '')
+        const sessionId = paintSessionKey
         const cursorMoved = !lastPaintedCursor
           || lastPaintedCursor.sessionId !== sessionId
           || lastPaintedCursor.exerciseIndex !== exerciseIndex
@@ -133,18 +213,14 @@ export function applyCanonicalExecutionSnapshot(snapshot, { update, startRest, s
         const entry = entryIndex >= 0 ? active.entries[entryIndex] : null
         const row = entry ? workSetAt(entry, setIndex + 1) : null
         if (row && !row.done) {
-          if (snapshot.cursor?.selectedLoadKg != null) row.w = snapshot.cursor.selectedLoadKg
-          if (snapshot.cursor?.selectedReps != null) row.r = snapshot.cursor.selectedReps
+          applyCursorSelection(row, snapshot.cursor, planExercise)
         }
       }
     }, false)
-    const restEndsAt = snapshot.cursor?.restEndsAt
-    if (snapshot.cursor?.phase === 'rest' && restEndsAt && typeof startRest === 'function') {
-      const remaining = Math.max(0, Math.ceil((Date.parse(restEndsAt) - Date.now()) / 1000))
-      if (remaining > 0) startRest(remaining)
-      else if (typeof stopRest === 'function') stopRest()
-    } else if (typeof stopRest === 'function' && snapshot.cursor?.phase !== 'rest') {
-      stopRest()
+    reconcileRestFromSnapshot(snapshot, { startRest, stopRest })
+    if (paintSessionKey) lastPaintedSessionId = paintSessionKey
+    if (Number.isInteger(revision)) {
+      lastPaintedRevision = Math.max(lastPaintedRevision, revision)
     }
   } finally {
     applyingRemoteSnapshot = false
@@ -157,6 +233,35 @@ export function workSetNumber(entry, index) {
     if (!entry.sets[i]?.warmup) number += 1
   }
   return number
+}
+
+function isFabricatedOneRepTarget(reps, loadKg) {
+  return Number(reps) === 1 && (loadKg == null || loadKg === '')
+}
+
+function rowHasOrdinaryTarget(row) {
+  const reps = Number(row?.r)
+  const weight = Number(row?.w)
+  return (Number.isFinite(reps) && reps > 1) || (Number.isFinite(weight) && weight > 0)
+}
+
+function planExerciseIsFabricated(exercise) {
+  if (!exercise) return true
+  return Number(exercise.repsMin) === 1
+    && Number(exercise.repsMax) === 1
+    && (exercise.loadKg == null || exercise.loadKg === '')
+}
+
+function applyCursorSelection(row, cursor, planExercise) {
+  const fabricated = isFabricatedOneRepTarget(cursor?.selectedReps, cursor?.selectedLoadKg)
+  if (fabricated && rowHasOrdinaryTarget(row)) return
+  if (fabricated && planExercise && !planExerciseIsFabricated(planExercise)) {
+    if (planExercise.loadKg != null) row.w = planExercise.loadKg
+    if (planExercise.repsMin != null) row.r = planExercise.repsMin
+    return
+  }
+  if (cursor?.selectedLoadKg != null) row.w = cursor.selectedLoadKg
+  if (cursor?.selectedReps != null) row.r = cursor.selectedReps
 }
 
 function workSetAt(entry, setNumber) {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyCanonicalExecutionSnapshot,
+  bindLpCanonicalExecutionSession,
   emitBeginWorkoutBridge,
   emitFinishWorkoutBridge,
   isApplyingRemoteSnapshot,
@@ -11,6 +12,7 @@ import {
   notifyLpWorkoutLeft,
   notifyLpWorkoutStarted,
   requestLifePilotExit,
+  resetLpExecutionPaintState,
   workoutFinishedPayload,
   workoutStartedPayload,
 } from "./lifepilot-workout-bridge.js";
@@ -30,6 +32,7 @@ function stubLpContext(context) {
 describe("LifePilot workout lifecycle bridge", () => {
   beforeEach(() => {
     memory.clear();
+    resetLpExecutionPaintState();
     vi.stubGlobal("sessionStorage", sessionStorageStub);
   });
 
@@ -282,10 +285,42 @@ describe("LifePilot workout lifecycle bridge", () => {
     expect(bench.sets[1].done).toBe(true);
   });
 
+  it("restarts the rest timer when a new restEndsAt arrives", () => {
+    const startRest = vi.fn();
+    const stopRest = vi.fn();
+  const bench = { id: "bench", sets: [{ w: 34, r: 8, done: true }, { w: 34, r: 8, done: false }] };
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "session-rest",
+        cursor: { phase: "rest", restEndsAt: "2099-01-01T00:01:00.000Z" },
+      },
+      {
+        update: (mut) => mut({ active: { entries: [bench] } }),
+        startRest,
+        stopRest,
+      },
+    );
+    expect(startRest).toHaveBeenCalledTimes(1);
+    startRest.mockClear();
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "session-rest",
+        cursor: { phase: "rest", restEndsAt: "2099-01-01T00:02:00.000Z" },
+      },
+      {
+        update: (mut) => mut({ active: { entries: [bench] } }),
+        startRest,
+        stopRest,
+      },
+    );
+    expect(startRest).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the open exercise when a later set is logged and the canonical cursor is still on the first exercise", () => {
     const bench = { id: "bench", sets: [{ w: 34, r: 8, done: true }, { w: 34, r: 8, done: false }] };
     const row = { id: "row", sets: [{ w: 22, r: 10, done: true }, { w: 22, r: 10, done: false }] };
     const state = { active: { entries: [bench, row], cur: 0 } };
+    bindLpCanonicalExecutionSession("session-rewind");
     const apply = (snapshot) => applyCanonicalExecutionSnapshot(snapshot, {
       update: (mut) => mut(state),
       startRest: () => {},
@@ -309,6 +344,68 @@ describe("LifePilot workout lifecycle bridge", () => {
     });
     expect(state.active.cur).toBe(1);
     expect(row.sets[1].done).toBe(true);
+  });
+
+  it("does not replace a locally initialised set with a one-rep snapshot", () => {
+    const curl = { id: "curl", sets: [{ w: 12, r: 10, done: false }, { w: 12, r: 10, done: false }] };
+    const state = { active: { entries: [curl], cur: 0 } };
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "adhoc-one-rep",
+        plan: [{ exerciseId: "curl", loadKg: null, repsMin: 1, repsMax: 1 }],
+        performed: [
+          { exerciseId: "curl", sets: [{ setNumber: 1, weightKg: null, reps: 1, completed: false }] },
+        ],
+        cursor: {
+          phase: "setReady",
+          exerciseIndex: 0,
+          setIndex: 0,
+          selectedLoadKg: null,
+          selectedReps: 1,
+        },
+      },
+      {
+        update: (mut) => mut(state),
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(curl.sets[0]).toMatchObject({ w: 12, r: 10, done: false });
+    expect(curl.sets[1]).toMatchObject({ w: 12, r: 10, done: false });
+  });
+
+  it("keeps a completed set and an explicit selection when the snapshot reconnects", () => {
+    const curl = {
+      id: "curl",
+      sets: [
+        { w: 12, r: 10, done: true },
+        { w: 14, r: 11, done: false },
+      ],
+    };
+    const state = { active: { entries: [curl], cur: 0 } };
+    applyCanonicalExecutionSnapshot(
+      {
+        sessionId: "adhoc-reconnect",
+        plan: [{ exerciseId: "curl", loadKg: 12, repsMin: 8, repsMax: 12 }],
+        performed: [
+          { exerciseId: "curl", sets: [{ setNumber: 1, weightKg: 12, reps: 10, completed: true }] },
+        ],
+        cursor: {
+          phase: "setReady",
+          exerciseIndex: 0,
+          setIndex: 1,
+          selectedLoadKg: 14,
+          selectedReps: 11,
+        },
+      },
+      {
+        update: (mut) => mut(state),
+        startRest: () => {},
+        stopRest: () => {},
+      },
+    );
+    expect(curl.sets[0]).toMatchObject({ w: 12, r: 10, done: true });
+    expect(curl.sets[1]).toMatchObject({ w: 14, r: 11, done: false });
   });
 });
 

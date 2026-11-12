@@ -23,7 +23,7 @@ import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLIC
 import { buildWorkoutEntries } from './lib/lifepilot-prescription.js'
 import { equipmentForExercise } from './lib/equipment.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
-import { isLpMode, isLpWorkoutMode, notifyLpCompletion, notifyLpExerciseSelected, emitBeginWorkoutBridge, emitFinishWorkoutBridge, notifyLpWorkoutDiscarded, requestLifePilotExit, getLpContext } from './lib/lifepilot.js'
+import { isLpMode, isLpWorkoutMode, notifyLpCompletion, notifyLpExerciseSelected, emitBeginWorkoutBridge, emitFinishWorkoutBridge, notifyLpWorkoutDiscarded, requestLifePilotExit, getLpContext, bindLpCanonicalExecutionSession } from './lib/lifepilot.js'
 import { durationSecondsFor, logWorkoutSession } from './lib/active-workout-session.js'
 
 const S = () => useStore.getState().S
@@ -897,6 +897,7 @@ export function beginWorkout(routineId, bw, opts = {}) {
   const started = S().active
   logWorkoutSession('created', { sessionId: started?.id, status: started?.status })
   emitBeginWorkoutBridge(started)
+  if (isLpWorkoutMode() && started?.id) bindLpCanonicalExecutionSession(started.id)
   useUI.getState().stopRest()
   nav('/workout')
 }

@@ -4,6 +4,8 @@ import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { useStore } from './useStore.js'
+import { isLpWorkoutMode, notifyLpWebOverlay } from '../lib/lifepilot.js'
+import { onLpRestTimerExpired, onLpUserSkippedRest } from '../lib/lifepilot-provisional-rest.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
 // before the local timer completes. No-ops for guests / offline.
@@ -62,11 +64,21 @@ export const useUI = create((set, get) => ({
   openSheet(render, { kind = 'sheet', locked = false } = {}) {
     const id = uid()
     set(s => ({ sheets: [...s.sheets, { id, render, kind, locked }] }))
+    if (isLpWorkoutMode()) notifyLpWebOverlay(true)
     const close = () => get().closeSheet(id)
     return { id, close, lock: v => set(s => ({ sheets: s.sheets.map(x => x.id === id ? { ...x, locked: v } : x) })) }
   },
-  closeSheet(id) { set(s => ({ sheets: s.sheets.filter(x => x.id !== id) })) },
-  closeAll() { set({ sheets: [] }) },
+  closeSheet(id) {
+    set(s => {
+      const next = s.sheets.filter(x => x.id !== id)
+      if (isLpWorkoutMode() && next.length === 0) notifyLpWebOverlay(false)
+      return { sheets: next }
+    })
+  },
+  closeAll() {
+    if (isLpWorkoutMode()) notifyLpWebOverlay(false)
+    set({ sheets: [] })
+  },
 
   toast(msg) {
     set({ toastMsg: msg })
@@ -75,7 +87,7 @@ export const useUI = create((set, get) => ({
   },
 
   startRest(sec) {
-    get().stopRest()
+    get().stopRest({ reason: 'internal' })
     const endsAt = Date.now() + sec * 1000
     set({ timer: { left: sec, total: sec, endsAt } })
     requestRestNotificationPermission()
@@ -88,7 +100,7 @@ export const useUI = create((set, get) => ({
       const snd = useStore.getState().S.sound
       if (left <= 0) {
         beep(snd, 880, 0.15); beep(snd, 880, 0.15, 0.25); beep(snd, 1320, 0.4, 0.5)
-        vibrate([200, 100, 200]); maybeRestNotification(); get().toast(t('Rest over — next set!')); get().stopRest(); return
+        vibrate([200, 100, 200]); maybeRestNotification(); get().toast(t('Rest over — next set!')); get().stopRest({ reason: 'expired' }); return
       }
       if (left <= 3) beep(snd, 660, 0.1)
       set({ timer: { ...tm, left } })
@@ -102,14 +114,19 @@ export const useUI = create((set, get) => ({
     const left = tm.left + sec
     // taking off more than is left means "I'm ready now" — same as skipping, and it keeps a
     // negative duration out of both the progress bar and the server-side push schedule
-    if (left <= 0) { get().stopRest(); return }
+    if (left <= 0) { get().stopRest({ reason: 'user' }); return }
     set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
     pushRestTimer(left)
   },
-  stopRest() {
+  stopRest(opts = {}) {
+    const reason = opts?.reason ?? 'internal'
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
+    if (isLpWorkoutMode()) {
+      if (reason === 'user') onLpUserSkippedRest()
+      else if (reason === 'expired') onLpRestTimerExpired()
+    }
     set({ timer: null })
   },
 
@@ -123,7 +140,7 @@ export const useUI = create((set, get) => ({
      hold records 0:38 rather than crediting the full target. */
   startWork(sec, label, onDone) {
     get().stopWork()
-    get().stopRest()
+    get().stopRest({ reason: 'internal' })
     const total = Math.max(1, Math.round(sec) || 1)
     const endsAt = Date.now() + total * 1000
     workDone = onDone
