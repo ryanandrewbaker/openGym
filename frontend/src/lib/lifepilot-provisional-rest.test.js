@@ -608,4 +608,70 @@ describe("lifepilot canonical paint session guard", () => {
     });
     expect(useUI.getState().timer?.left).toBe(60);
   });
+
+  it("clears stale engine identity on external rebind (ext-A → ext-B, delayed engine-A rejected)", () => {
+    const bench = { id: "bench", sets: [{ w: 34, r: 8, done: false }, { w: 34, r: 8, done: false }] };
+    const row = { id: "row", sets: [{ w: 22, r: 10, done: false }, { w: 22, r: 10, done: false }] };
+    const state = { active: { cur: 0, entries: [bench, row] } };
+    const apply = (snapshot) => applyCanonicalExecutionSnapshot(snapshot, {
+      update: (mut) => mut(state),
+      ...useUI.getState(),
+    });
+
+    bindLpCanonicalExecutionSession("ext-A");
+    apply({
+      sessionId: "engine-A",
+      externalSessionId: "ext-A",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [{ exerciseId: "bench", sets: [{ setNumber: 1, weightKg: 34, reps: 8, completed: true }] }],
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:05:00.000Z", revision: 20, exerciseIndex: 0, setIndex: 1 },
+    });
+    expect(bench.sets[0].done).toBe(true);
+    expect(useUI.getState().timer?.left).toBe(300);
+
+    bindLpCanonicalExecutionSession("ext-B");
+    useUI.getState().stopRest({ reason: "internal" });
+
+    apply({
+      sessionId: "engine-A",
+      externalSessionId: "ext-A",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [
+        { exerciseId: "bench", sets: [{ setNumber: 1, weightKg: 99, reps: 1, completed: true }] },
+        { exerciseId: "row", sets: [{ setNumber: 1, weightKg: 22, reps: 10, completed: true }] },
+      ],
+      cursor: { phase: "setReady", exerciseIndex: 1, setIndex: 0, revision: 21 },
+    });
+    expect(bench.sets[0].w).toBe(34);
+    expect(bench.sets[0].done).toBe(true);
+    expect(row.sets[0].done).toBe(false);
+    expect(state.active.cur).toBe(0);
+    expect(useUI.getState().timer).toBeNull();
+
+    apply({
+      sessionId: "engine-B",
+      externalSessionId: "ext-B",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [{ exerciseId: "bench", sets: [{ setNumber: 1, weightKg: 36, reps: 10, completed: true }] }],
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:01:15.000Z", revision: 1, exerciseIndex: 0, setIndex: 1 },
+    });
+    expect(bench.sets[0].done).toBe(true);
+    expect(bench.sets[0].w).toBe(36);
+    expect(bench.sets[0].r).toBe(10);
+    expect(state.active.cur).toBe(0);
+    expect(useUI.getState().timer?.left).toBe(75);
+
+    const timerLeft = useUI.getState().timer?.left;
+    const benchW = bench.sets[0].w;
+    apply({
+      sessionId: "engine-A",
+      externalSessionId: "ext-A",
+      plan: [{ exerciseId: "bench" }, { exerciseId: "row" }],
+      performed: [{ exerciseId: "row", sets: [{ setNumber: 2, weightKg: 44, reps: 6, completed: true }] }],
+      cursor: { phase: "rest", restEndsAt: "2026-11-12T10:09:00.000Z", revision: 25, exerciseIndex: 1, setIndex: 1 },
+    });
+    expect(bench.sets[0].w).toBe(benchW);
+    expect(useUI.getState().timer?.left).toBe(timerLeft);
+    expect(row.sets[1].done).toBe(false);
+  });
 });

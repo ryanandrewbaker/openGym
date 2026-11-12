@@ -121,30 +121,40 @@ function snapshotMatchesAttached(snapshot) {
   return false
 }
 
+function clearLpExecutionPaintRevisionState() {
+  lastPaintedCursor = null
+  lastPaintedRevision = -1
+  lastPaintedSessionId = null
+}
+
 /** Bind canonical paints to one execution session (engine and/or OpenGym external id). */
 export function bindLpCanonicalExecutionSession(snapshotOrExternalId) {
   if (!snapshotOrExternalId) return
-  const prevBinding = executionBindingIdentity()
   if (typeof snapshotOrExternalId === 'string') {
+    const hadEngine = attachedEngineSessionId != null
+    const switchingExternal = attachedExternalSessionId !== snapshotOrExternalId
     attachedExternalSessionId = snapshotOrExternalId
-  } else {
-    if (snapshotOrExternalId.sessionId) attachedEngineSessionId = String(snapshotOrExternalId.sessionId)
-    if (snapshotOrExternalId.externalSessionId) {
-      attachedExternalSessionId = String(snapshotOrExternalId.externalSessionId)
+    attachedEngineSessionId = null
+    if (switchingExternal || hadEngine) {
+      clearLpExecutionPaintRevisionState()
     }
+    return
   }
-  const nextBinding = executionBindingIdentity()
-  if (prevBinding && nextBinding && prevBinding !== nextBinding) {
-    lastPaintedCursor = null
-    lastPaintedRevision = -1
-    lastPaintedSessionId = null
+  if (snapshotOrExternalId.externalSessionId) {
+    const external = String(snapshotOrExternalId.externalSessionId)
+    if (attachedExternalSessionId && attachedExternalSessionId !== external) {
+      attachedEngineSessionId = null
+      clearLpExecutionPaintRevisionState()
+    }
+    attachedExternalSessionId = external
+  }
+  if (snapshotOrExternalId.sessionId) {
+    attachedEngineSessionId = String(snapshotOrExternalId.sessionId)
   }
 }
 
 export function resetLpExecutionPaintState() {
-  lastPaintedCursor = null
-  lastPaintedRevision = -1
-  lastPaintedSessionId = null
+  clearLpExecutionPaintRevisionState()
   attachedEngineSessionId = null
   attachedExternalSessionId = null
 }
