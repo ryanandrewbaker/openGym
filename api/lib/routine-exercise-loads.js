@@ -49,23 +49,38 @@ function parseOwnerVerifiedSemantics(value) {
 }
 
 function parseVerifiedImplementsPerSet(value) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < 1 || n > 4) return null;
-  return n;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1 || value > 4) return null;
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!/^[0-9]+$/.test(trimmed)) return null;
+    const n = Number(trimmed);
+    if (!Number.isInteger(n) || n < 1 || n > 4) return null;
+    return n;
+  }
+  return null;
 }
 
 function customExerciseFor(state, exerciseId) {
   return (state?.customEx || []).find((entry) => String(entry.id) === String(exerciseId)) ?? null;
 }
 
-function resolveVerifiedImplementsPerSet(state, cfg, exerciseId, loadSemantics) {
-  if (loadSemantics !== "per_implement") return null;
-  const slot = parseVerifiedImplementsPerSet(cfg?.verifiedImplementsPerSet);
-  if (slot != null) return slot;
-  const custom = customExerciseFor(state, exerciseId);
-  const customImplements = parseVerifiedImplementsPerSet(custom?.verifiedImplementsPerSet);
-  if (customImplements != null) return customImplements;
-  return VERIFIED_IMPLEMENTS_PER_SET.get(String(exerciseId)) ?? null;
+function resolveVerifiedImplementsPerSet(state, cfg, exerciseId, ownerVerified, slotSemantics, customSemantics) {
+  if (ownerVerified !== "per_implement") return null;
+
+  if (slotSemantics != null) {
+    if (slotSemantics !== "per_implement") return null;
+    return parseVerifiedImplementsPerSet(cfg?.verifiedImplementsPerSet);
+  }
+
+  if (customSemantics === "per_implement") {
+    const custom = customExerciseFor(state, exerciseId);
+    return parseVerifiedImplementsPerSet(custom?.verifiedImplementsPerSet);
+  }
+
+  return null;
 }
 
 /**
@@ -82,7 +97,14 @@ export function classifyLoadSemantics(state, cfg, exerciseId) {
   if (ownerVerified) {
     return {
       loadSemantics: ownerVerified,
-      implementsPerSet: resolveVerifiedImplementsPerSet(state, cfg, id, ownerVerified),
+      implementsPerSet: resolveVerifiedImplementsPerSet(
+        state,
+        cfg,
+        id,
+        ownerVerified,
+        slotSemantics,
+        customSemantics,
+      ),
       loadSemanticsSource: "owner_verified",
     };
   }
