@@ -89,6 +89,46 @@ test("prefill parity with buildSets for heterogeneous last sets without exWeight
   assert.equal(summary.progressionWorkingLoadUniform, false);
 });
 
+test("partial per-set prefills with unknown weights do not collapse to a scalar", () => {
+  const cfg = { id: "0289", sets: 2, reps: 8, weight: 18 };
+  const cases = [
+    [
+      [
+        { w: 10, r: 8, done: true },
+        { w: null, r: 8, done: true },
+      ],
+      [10, null],
+    ],
+    [
+      [
+        { w: null, r: 8, done: true },
+        { w: 10, r: 8, done: true },
+      ],
+      [null, 10],
+    ],
+  ];
+  for (const [sets, expectedLoads] of cases) {
+    const state = {
+      unit: "kg",
+      workouts: [{ entries: [{ id: "0289", sets }] }],
+      exWeights: {},
+    };
+    assert.deepEqual(resolvePlannedPrefillLoadsKg(state, cfg), expectedLoads);
+    const uiSets = buildSets(state, cfg);
+    assert.deepEqual(
+      expectedLoads,
+      uiSets.map((set) => (set.w == null || set.w === "" ? null : set.w)),
+    );
+    const summary = resolvePlannedPrefill(state, cfg);
+    assert.equal(summary.progressionWorkingLoadKg, null);
+    assert.equal(summary.progressionLoadSource, "partial_per_set");
+    assert.equal(summary.progressionWorkingLoadUniform, false);
+    const enriched = enrichExerciseLoadFields(state, cfg);
+    assert.equal(enriched.progressionWorkingLoadKg, null);
+    assert.equal(enriched.progressionNextAvailableLoadKg, null);
+  }
+});
+
 test("prefill parity for homogeneous last sets without exWeights", () => {
   const cfg = { id: "0289", sets: 3, reps: 8, weight: 18 };
   const state = {

@@ -101,16 +101,23 @@ export function resolvePlannedPrefillLoadsKg(state, cfg) {
 }
 
 function uniformLoadKg(loadsKg) {
+  if (!loadsKg.length) {
+    return { uniform: null, heterogeneous: false, partial: false };
+  }
+  const hasUnknown = loadsKg.some((v) => v == null || !Number.isFinite(v));
   const finite = loadsKg.filter((v) => v != null && Number.isFinite(v));
+  if (hasUnknown && finite.length > 0) {
+    return { uniform: null, heterogeneous: false, partial: true };
+  }
   if (finite.length === 0) {
-    return { uniform: null, heterogeneous: false };
+    return { uniform: null, heterogeneous: false, partial: false };
   }
   const first = finite[0];
   const heterogeneous = finite.some((v) => !weightsNearlyEqual(v, first));
   if (heterogeneous) {
-    return { uniform: null, heterogeneous: true };
+    return { uniform: null, heterogeneous: true, partial: false };
   }
-  return { uniform: first, heterogeneous: false };
+  return { uniform: first, heterogeneous: false, partial: false };
 }
 
 /**
@@ -119,7 +126,7 @@ function uniformLoadKg(loadsKg) {
 export function resolvePlannedPrefill(state, cfg) {
   const loadsKg = resolvePlannedPrefillLoadsKg(state, cfg);
   const conf = state?.exWeights?.[cfg.id];
-  const { uniform, heterogeneous } = uniformLoadKg(loadsKg);
+  const { uniform, heterogeneous, partial } = uniformLoadKg(loadsKg);
 
   if (conf && conf.w > 0) {
     const unit = state?.unit === "lb" ? "lb" : "kg";
@@ -128,6 +135,15 @@ export function resolvePlannedPrefill(state, cfg) {
       progressionLoadSource: "ex_weights",
       progressionPrefillLoadsKg: loadsKg,
       progressionWorkingLoadUniform: true,
+    };
+  }
+
+  if (partial) {
+    return {
+      progressionWorkingLoadKg: null,
+      progressionLoadSource: "partial_per_set",
+      progressionPrefillLoadsKg: loadsKg,
+      progressionWorkingLoadUniform: false,
     };
   }
 
