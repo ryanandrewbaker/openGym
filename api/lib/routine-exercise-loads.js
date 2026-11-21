@@ -18,6 +18,12 @@ const BARBELL_EQ = new Set([
 
 const PER_IMPLEMENT_EQ = new Set(["dumbbell", "kettlebell"]);
 
+const OWNER_VERIFIED_LOAD_SEMANTICS = new Set([
+  "per_implement",
+  "barbell_total",
+  "bodyweight_offset",
+]);
+
 /**
  * Verified catalogue bilateral dumbbell exercises where two implements share one
  * logged scalar. Do not extend by name heuristics — unknown IDs stay null.
@@ -36,28 +42,77 @@ function isBwFlag(cfg, exerciseId) {
   return catalogueEq(exerciseId) === "body weight";
 }
 
+function parseOwnerVerifiedSemantics(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return OWNER_VERIFIED_LOAD_SEMANTICS.has(normalized) ? normalized : null;
+}
+
+function parseVerifiedImplementsPerSet(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 4) return null;
+  return n;
+}
+
+function customExerciseFor(state, exerciseId) {
+  return (state?.customEx || []).find((entry) => String(entry.id) === String(exerciseId)) ?? null;
+}
+
+function resolveVerifiedImplementsPerSet(state, cfg, exerciseId, loadSemantics) {
+  if (loadSemantics !== "per_implement") return null;
+  const slot = parseVerifiedImplementsPerSet(cfg?.verifiedImplementsPerSet);
+  if (slot != null) return slot;
+  const custom = customExerciseFor(state, exerciseId);
+  const customImplements = parseVerifiedImplementsPerSet(custom?.verifiedImplementsPerSet);
+  if (customImplements != null) return customImplements;
+  return VERIFIED_IMPLEMENTS_PER_SET.get(String(exerciseId)) ?? null;
+}
+
 /**
  * Classify how a logged scalar load should be interpreted for agents.
  * Does not transform weights — documentation only.
  */
-export function classifyLoadSemantics(cfg, exerciseId) {
-  const eq = catalogueEq(exerciseId);
-  const bw = isBwFlag(cfg, exerciseId);
+export function classifyLoadSemantics(state, cfg, exerciseId) {
+  const id = String(exerciseId ?? cfg?.id ?? "");
+  const slotSemantics = parseOwnerVerifiedSemantics(cfg?.verifiedLoadSemantics);
+  const customEx = customExerciseFor(state, id);
+  const customSemantics = parseOwnerVerifiedSemantics(customEx?.verifiedLoadSemantics);
+  const ownerVerified = slotSemantics ?? customSemantics;
+
+  if (ownerVerified) {
+    return {
+      loadSemantics: ownerVerified,
+      implementsPerSet: resolveVerifiedImplementsPerSet(state, cfg, id, ownerVerified),
+      loadSemanticsSource: "owner_verified",
+    };
+  }
+
+  const eq = catalogueEq(id);
+  const bw = isBwFlag(cfg, id);
 
   if (bw || eq === "body weight") {
-    return { loadSemantics: "bodyweight_offset", implementsPerSet: null };
+    return {
+      loadSemantics: "bodyweight_offset",
+      implementsPerSet: null,
+      loadSemanticsSource: "catalogue",
+    };
   }
   if (BARBELL_EQ.has(eq)) {
-    return { loadSemantics: "barbell_total", implementsPerSet: null };
+    return {
+      loadSemantics: "barbell_total",
+      implementsPerSet: null,
+      loadSemanticsSource: "catalogue",
+    };
   }
   if (PER_IMPLEMENT_EQ.has(eq)) {
-    const verified = VERIFIED_IMPLEMENTS_PER_SET.get(String(exerciseId));
+    const verified = VERIFIED_IMPLEMENTS_PER_SET.get(id);
     return {
       loadSemantics: "per_implement",
       implementsPerSet: verified ?? null,
+      loadSemanticsSource: "catalogue",
     };
   }
-  return { loadSemantics: "unknown", implementsPerSet: null };
+  return { loadSemantics: "unknown", implementsPerSet: null, loadSemanticsSource: "unknown" };
 }
 
 export function lastEntryFor(state, exerciseId) {
@@ -207,7 +262,7 @@ export function enrichExerciseLoadFields(state, entry) {
   const exerciseId = String(entry.id);
   const routineTemplate = routineTemplateLoadKg(entry, state);
   const prefill = resolvePlannedPrefill(state, entry);
-  const semantics = classifyLoadSemantics(entry, exerciseId);
+  const semantics = classifyLoadSemantics(state, entry, exerciseId);
   const kit = equipmentForCatalogue(state, entry, catalogueEq(exerciseId));
 
   const templateLadder = ladderFromLoadKg(routineTemplate, kit);
@@ -227,6 +282,7 @@ export function enrichExerciseLoadFields(state, entry) {
     progressionPrefillLoadsKg: prefill.progressionPrefillLoadsKg,
     progressionWorkingLoadUniform: prefill.progressionWorkingLoadUniform,
     loadSemantics: semantics.loadSemantics,
+    loadSemanticsSource: semantics.loadSemanticsSource,
     implementsPerSet: semantics.implementsPerSet,
     templateLadderReference: "routine_template",
     progressionLadderReference:
