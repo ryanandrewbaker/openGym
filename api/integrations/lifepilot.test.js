@@ -233,6 +233,59 @@ test("routine endpoint returns planned exercises for a routine", async () => {
   assert.equal(lateral.loadsKg.includes(23), false);
 });
 
+test("routine endpoint exposes template vs progression loads and semantics for 0289", async () => {
+  const { call, dataDir } = makeHarness();
+
+  const provisioned = await call("POST /integrations/lifepilot/provision", {
+    profileId: "profile-load-semantics",
+    displayName: "Ryan",
+  });
+  const userId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+  const file = path.join(dataDir, `state-${userId}.json`);
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  const routine = state.routines.find((entry) => entry.id === routineId);
+  routine.ex = [
+    { id: "0289", sets: 4, reps: 10, weight: 18 },
+    { id: "0334", sets: 3, reps: 12, weight: 9, repsMin: 8 },
+    { id: "2188", sets: 3, reps: 10, weight: 13 },
+    { id: "0025", sets: 4, reps: 8, weight: 60 },
+  ];
+  state.workouts = [
+    {
+      id: "w-0289",
+      entries: [{ id: "0289", sets: [{ w: 36, r: 8, done: true }, { w: 36, r: 8, done: true }] }],
+    },
+  ];
+  state.exWeights = { "0289": { w: 36, d: "2026-11-20" } };
+  fs.writeFileSync(file, JSON.stringify(state));
+
+  const detail = await call("POST /integrations/lifepilot/routine", {
+    profileId: "profile-load-semantics",
+    openGymUserId: userId,
+    routineId,
+  });
+
+  const bench = detail.body.exercises.find((exercise) => exercise.exerciseId === "0289");
+  assert.equal(bench.currentLoadKg, 18);
+  assert.equal(bench.routineTemplateLoadKg, 18);
+  assert.equal(bench.progressionWorkingLoadKg, 36);
+  assert.equal(bench.progressionLoadSource, "ex_weights");
+  assert.equal(bench.loadSemantics, "per_implement");
+  assert.equal(bench.implementsPerSet, 2);
+
+  const lateral = detail.body.exercises.find((exercise) => exercise.exerciseId === "0334");
+  assert.equal(lateral.loadSemantics, "per_implement");
+  assert.equal(lateral.implementsPerSet, 2);
+
+  const triceps = detail.body.exercises.find((exercise) => exercise.exerciseId === "2188");
+  assert.equal(triceps.loadSemantics, "per_implement");
+  assert.equal(triceps.implementsPerSet, 1);
+
+  const barbell = detail.body.exercises.find((exercise) => exercise.exerciseId === "0025");
+  assert.equal(barbell.loadSemantics, "barbell_total");
+});
+
 test("routine endpoint uses the custom exercise name instead of its id", async () => {
   const { call, dataDir } = makeHarness();
 

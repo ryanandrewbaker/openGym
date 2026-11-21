@@ -68,6 +68,16 @@ The [Definition of Ready](https://masis-app.atlassian.net/wiki/spaces/MASIS/page
 
 Assess impact across all four repositories; change only what the issue requires. **Resolved** (Done on the board) requires applicable verification, independent review and evidence on the issue — **Resolved is not Released**. Production, TestFlight and public website deployment need separate authorisation.
 
+### LifePilot routine detail (`POST /integrations/lifepilot/routine`)
+
+Per exercise, load fields are **additive** (MASIS-149):
+
+- **`routineTemplateLoadKg`** — routine card template weight; may lag.
+- **`progressionWorkingLoadKg`** — prefill for a new planned session (same precedence as `buildSets` in `frontend/src/lib/history.js`: `exWeights` → last usable set → template).
+- **`progressionLoadSource`** — provenance of the progression scalar.
+- **`loadSemantics`** / optional **`implementsPerSet`** — agent documentation only (e.g. dumbbell bench: `per_implement`, `36` = 36 kg **per** dumbbell).
+- **`currentLoadKg`** — backward-compatible **template** alias (not next-session authority).
+
 This README summarises the guardrails. Authoritative policy and workflow detail:
 
 - [`.cursor/rules/masis-delivery.mdc`](.cursor/rules/masis-delivery.mdc) — always-on Cursor governance

@@ -21,6 +21,7 @@ import {
   routineMappingsFromState,
   scheduleWriteConflicts,
 } from "./lifepilot-schedule.js";
+import { enrichExerciseLoadFields } from "../lib/routine-exercise-loads.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
 const SERVICE_SECRET = process.env.LIFEPILOT_OPENGYM_SERVICE_SECRET || process.env.OPENGYM_SERVICE_SECRET || "";
@@ -204,6 +205,9 @@ function exerciseDisplayName(state, exerciseId) {
   return openGymExerciseName(exerciseId);
 }
 
+/** Ladder context is computed from the routine template weight (`routine.ex[].weight`).
+ *  `currentLoadKg` remains that template alias for backward compatibility.
+ *  Next-session prefill and `progressionWorkingLoadKg` come from `enrichExerciseLoadFields`. */
 function exerciseProgression(state, entry) {
   const unit = state?.unit === "lb" ? "lb" : "kg";
   const kit = equipmentForCatalogue(state, entry, catalogueEq(entry.id));
@@ -242,14 +246,19 @@ function routineDetailFromState(state, routineId) {
   return {
     id: String(routine.id),
     name: routine.name,
-    exercises: (routine.ex || []).map((entry) => ({
-      exerciseId: String(entry.id),
-      exerciseName: exerciseDisplayName(state, entry.id),
-      sets: Number(entry.sets) || 0,
-      reps: Number(entry.reps) || 0,
-      repsMin: entry.repsMin != null ? Number(entry.repsMin) : null,
-      ...exerciseProgression(state, entry),
-    })),
+    exercises: (routine.ex || []).map((entry) => {
+      const exerciseName = exerciseDisplayName(state, entry.id);
+      const loadFields = enrichExerciseLoadFields(state, entry, exerciseName);
+      return {
+        exerciseId: String(entry.id),
+        exerciseName,
+        sets: Number(entry.sets) || 0,
+        reps: Number(entry.reps) || 0,
+        repsMin: entry.repsMin != null ? Number(entry.repsMin) : null,
+        ...exerciseProgression(state, entry),
+        ...loadFields,
+      };
+    }),
   };
 }
 
