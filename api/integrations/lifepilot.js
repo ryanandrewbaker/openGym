@@ -217,6 +217,7 @@ function exerciseProgression(state, entry) {
       nextAvailableLoadKg: null,
       previousAvailableLoadKg: null,
       loadJumpPercent: null,
+      templateLadderReference: "routine_template",
       equipmentId: null,
       equipmentName: null,
     };
@@ -230,6 +231,8 @@ function exerciseProgression(state, entry) {
     nextAvailableLoadKg: convertLoad(next, unit, "kg"),
     previousAvailableLoadKg: convertLoad(prev, unit, "kg"),
     loadJumpPercent: next != null && current > 0 ? getLoadJumpPercent(current, next) : null,
+    /** Legacy ladder fields are anchored to routine template weight, not progression prefill. */
+    templateLadderReference: "routine_template",
     equipmentId: kit.id,
     equipmentName: kit.name,
     maxLoadJumpPercent: maxLoadJumpPercent(kit),
@@ -248,7 +251,7 @@ function routineDetailFromState(state, routineId) {
     name: routine.name,
     exercises: (routine.ex || []).map((entry) => {
       const exerciseName = exerciseDisplayName(state, entry.id);
-      const loadFields = enrichExerciseLoadFields(state, entry, exerciseName);
+      const loadFields = enrichExerciseLoadFields(state, entry);
       return {
         exerciseId: String(entry.id),
         exerciseName,

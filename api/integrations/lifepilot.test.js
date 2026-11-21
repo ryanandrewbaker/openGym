@@ -278,9 +278,14 @@ test("routine endpoint exposes template vs progression loads and semantics for 0
   assert.equal(lateral.loadSemantics, "per_implement");
   assert.equal(lateral.implementsPerSet, 2);
 
+  assert.equal(bench.templateNextAvailableLoadKg, 20);
+  assert.equal(bench.progressionNextAvailableLoadKg, 38);
+  assert.equal(bench.nextAvailableLoadKg, 20);
+  assert.equal(bench.templateLadderReference, "routine_template");
+
   const triceps = detail.body.exercises.find((exercise) => exercise.exerciseId === "2188");
   assert.equal(triceps.loadSemantics, "per_implement");
-  assert.equal(triceps.implementsPerSet, 1);
+  assert.equal(triceps.implementsPerSet, null);
 
   const barbell = detail.body.exercises.find((exercise) => exercise.exerciseId === "0025");
   assert.equal(barbell.loadSemantics, "barbell_total");

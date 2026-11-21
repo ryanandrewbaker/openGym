@@ -76,7 +76,9 @@ Per exercise, load fields are **additive** (MASIS-149):
 - **`progressionWorkingLoadKg`** — prefill for a new planned session (same precedence as `buildSets` in `frontend/src/lib/history.js`: `exWeights` → last usable set → template).
 - **`progressionLoadSource`** — provenance of the progression scalar.
 - **`loadSemantics`** / optional **`implementsPerSet`** — agent documentation only (e.g. dumbbell bench: `per_implement`, `36` = 36 kg **per** dumbbell).
-- **`currentLoadKg`** — backward-compatible **template** alias (not next-session authority).
+- **`currentLoadKg`** / **`nextAvailableLoadKg`** — backward-compatible **template** ladder (not progression authority).
+- **`progressionNextAvailableLoadKg`** / **`progressionPrefillLoadsKg`** — progression-relative ladder and exact per-set prefills.
+- **`implementsPerSet`** — only on a verified exercise-id allowlist; otherwise null (semantics may still be `per_implement`).
 
 This README summarises the guardrails. Authoritative policy and workflow detail:
 

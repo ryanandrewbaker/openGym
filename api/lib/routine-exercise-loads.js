@@ -1,5 +1,12 @@
 import { EXDB } from "../lib/exercises-data.js";
-import { convertLoad } from "./equipment-core.js";
+import {
+  convertLoad,
+  equipmentForCatalogue,
+  getLoadJumpPercent,
+  getNextAvailableLoad,
+  getPreviousAvailableLoad,
+  loadsInUnit,
+} from "./equipment-core.js";
 
 const BARBELL_EQ = new Set([
   "barbell",
@@ -11,9 +18,14 @@ const BARBELL_EQ = new Set([
 
 const PER_IMPLEMENT_EQ = new Set(["dumbbell", "kettlebell"]);
 
-/** Names that reliably use one dumbbell for the logged scalar (both hands on one implement). */
-const SINGLE_DUMBBELL_NAME =
-  /\b(seated triceps extension|lying triceps extension|goblet squat|goblet|pullover|concentration curl)\b/i;
+/**
+ * Verified catalogue bilateral dumbbell exercises where two implements share one
+ * logged scalar. Do not extend by name heuristics — unknown IDs stay null.
+ */
+const VERIFIED_IMPLEMENTS_PER_SET = new Map([
+  ["0289", 2], // dumbbell bench press (UAT / MASIS-149)
+  ["0334", 2], // dumbbell lateral raise (catalogue bilateral convention)
+]);
 
 export function catalogueEq(exerciseId) {
   return EXDB.find((entry) => entry.id === exerciseId)?.eq || "";
@@ -24,23 +36,11 @@ function isBwFlag(cfg, exerciseId) {
   return catalogueEq(exerciseId) === "body weight";
 }
 
-function isPerSide(cfg) {
-  return !!(cfg && cfg.side);
-}
-
-function singleDumbbellSession(exerciseId, exerciseName) {
-  const name = String(exerciseName || "").trim();
-  if (SINGLE_DUMBBELL_NAME.test(name)) return true;
-  const ex = EXDB.find((entry) => entry.id === exerciseId);
-  if (ex && SINGLE_DUMBBELL_NAME.test(String(ex.n || ""))) return true;
-  return false;
-}
-
 /**
  * Classify how a logged scalar load should be interpreted for agents.
  * Does not transform weights — documentation only.
  */
-export function classifyLoadSemantics(cfg, exerciseId, exerciseName) {
+export function classifyLoadSemantics(cfg, exerciseId) {
   const eq = catalogueEq(exerciseId);
   const bw = isBwFlag(cfg, exerciseId);
 
@@ -51,13 +51,11 @@ export function classifyLoadSemantics(cfg, exerciseId, exerciseName) {
     return { loadSemantics: "barbell_total", implementsPerSet: null };
   }
   if (PER_IMPLEMENT_EQ.has(eq)) {
-    let implementsPerSet = null;
-    if (!isPerSide(cfg) && !singleDumbbellSession(exerciseId, exerciseName)) {
-      implementsPerSet = 2;
-    } else if (singleDumbbellSession(exerciseId, exerciseName)) {
-      implementsPerSet = 1;
-    }
-    return { loadSemantics: "per_implement", implementsPerSet };
+    const verified = VERIFIED_IMPLEMENTS_PER_SET.get(String(exerciseId));
+    return {
+      loadSemantics: "per_implement",
+      implementsPerSet: verified ?? null,
+    };
   }
   return { loadSemantics: "unknown", implementsPerSet: null };
 }
@@ -73,41 +71,114 @@ export function lastEntryFor(state, exerciseId) {
   return null;
 }
 
+function weightsNearlyEqual(a, b) {
+  return Math.abs(Number(a) - Number(b)) < 0.05;
+}
+
 /**
- * Mirrors planned-session `buildSets()` prefill (preferLast: false) — exWeights, then last
- * usable working set, then routine template weight.
+ * Planned-session prefill weights in kg, mirroring `buildSets(S, cfg)` with preferLast: false.
+ */
+export function resolvePlannedPrefillLoadsKg(state, cfg) {
+  const last = lastEntryFor(state, cfg.id);
+  const setCount = Math.max(1, Number(cfg.sets) || 1);
+  const conf = state?.exWeights?.[cfg.id];
+  const unit = state?.unit === "lb" ? "lb" : "kg";
+  const prevAt = (i) => (last ? last.sets[i] || last.sets[last.sets.length - 1] : null);
+  const out = [];
+
+  for (let i = 0; i < setCount; i += 1) {
+    const prev = prevAt(i);
+    const usable = prev && prev.r > 0 ? prev : null;
+    const w = conf && conf.w > 0 ? conf.w : usable ? usable.w : cfg.weight;
+    if (w == null || w === "") {
+      out.push(null);
+      continue;
+    }
+    const n = Number(w);
+    out.push(Number.isFinite(n) ? convertLoad(n, unit, "kg") : null);
+  }
+  return out;
+}
+
+function uniformLoadKg(loadsKg) {
+  const finite = loadsKg.filter((v) => v != null && Number.isFinite(v));
+  if (finite.length === 0) {
+    return { uniform: null, heterogeneous: false };
+  }
+  const first = finite[0];
+  const heterogeneous = finite.some((v) => !weightsNearlyEqual(v, first));
+  if (heterogeneous) {
+    return { uniform: null, heterogeneous: true };
+  }
+  return { uniform: first, heterogeneous: false };
+}
+
+/**
+ * Scalar summary + source for agents. Heterogeneous per-set prefills must not collapse to first set only.
  */
 export function resolvePlannedPrefill(state, cfg) {
-  const last = lastEntryFor(state, cfg.id);
+  const loadsKg = resolvePlannedPrefillLoadsKg(state, cfg);
   const conf = state?.exWeights?.[cfg.id];
-  const prev = last?.sets?.[0] ?? null;
-  const usable = prev && prev.r > 0 ? prev : null;
-
-  let weightInUnit = null;
-  let progressionLoadSource = "unavailable";
+  const { uniform, heterogeneous } = uniformLoadKg(loadsKg);
 
   if (conf && conf.w > 0) {
-    weightInUnit = Number(conf.w);
-    progressionLoadSource = "ex_weights";
-  } else if (usable) {
-    weightInUnit = usable.w != null ? Number(usable.w) : null;
-    progressionLoadSource = "last_usable_set";
-  } else if (cfg.weight != null && Number(cfg.weight) > 0) {
-    weightInUnit = Number(cfg.weight);
-    progressionLoadSource = "routine_template";
-  }
-
-  if (weightInUnit == null || !Number.isFinite(weightInUnit)) {
+    const unit = state?.unit === "lb" ? "lb" : "kg";
     return {
-      progressionWorkingLoadKg: null,
-      progressionLoadSource: "unavailable",
+      progressionWorkingLoadKg: convertLoad(Number(conf.w), unit, "kg"),
+      progressionLoadSource: "ex_weights",
+      progressionPrefillLoadsKg: loadsKg,
+      progressionWorkingLoadUniform: true,
     };
   }
 
-  const unit = state?.unit === "lb" ? "lb" : "kg";
+  if (heterogeneous) {
+    return {
+      progressionWorkingLoadKg: null,
+      progressionLoadSource: "last_usable_set_per_set",
+      progressionPrefillLoadsKg: loadsKg,
+      progressionWorkingLoadUniform: false,
+    };
+  }
+
+  if (uniform != null) {
+    const last = lastEntryFor(state, cfg.id);
+    const hadUsableHistory =
+      last &&
+      loadsKg.some((_, i) => {
+        const prev = last.sets[i] || last.sets[last.sets.length - 1];
+        return prev && prev.r > 0;
+      });
+    return {
+      progressionWorkingLoadKg: uniform,
+      progressionLoadSource: hadUsableHistory ? "last_usable_set" : "routine_template",
+      progressionPrefillLoadsKg: loadsKg,
+      progressionWorkingLoadUniform: true,
+    };
+  }
+
   return {
-    progressionWorkingLoadKg: convertLoad(weightInUnit, unit, "kg"),
-    progressionLoadSource,
+    progressionWorkingLoadKg: null,
+    progressionLoadSource: "unavailable",
+    progressionPrefillLoadsKg: loadsKg,
+    progressionWorkingLoadUniform: false,
+  };
+}
+
+export function ladderFromLoadKg(loadKg, kit) {
+  if (!kit || loadKg == null || !Number.isFinite(loadKg)) {
+    return {
+      nextAvailableLoadKg: null,
+      previousAvailableLoadKg: null,
+      loadJumpPercent: null,
+    };
+  }
+  const loads = loadsInUnit(kit, "kg");
+  const next = getNextAvailableLoad(loadKg, loads);
+  const prev = getPreviousAvailableLoad(loadKg, loads);
+  return {
+    nextAvailableLoadKg: next != null ? convertLoad(next, "kg", "kg") : null,
+    previousAvailableLoadKg: prev != null ? convertLoad(prev, "kg", "kg") : null,
+    loadJumpPercent: next != null && loadKg > 0 ? getLoadJumpPercent(loadKg, next) : null,
   };
 }
 
@@ -116,15 +187,39 @@ export function routineTemplateLoadKg(entry, state) {
   return convertLoad(entry.weight, unit, "kg");
 }
 
-export function enrichExerciseLoadFields(state, entry, exerciseName) {
+export function enrichExerciseLoadFields(state, entry) {
+  const exerciseId = String(entry.id);
   const routineTemplate = routineTemplateLoadKg(entry, state);
-  const { progressionWorkingLoadKg, progressionLoadSource } = resolvePlannedPrefill(state, entry);
-  const semantics = classifyLoadSemantics(entry, entry.id, exerciseName);
+  const prefill = resolvePlannedPrefill(state, entry);
+  const semantics = classifyLoadSemantics(entry, exerciseId);
+  const kit = equipmentForCatalogue(state, entry, catalogueEq(exerciseId));
+
+  const templateLadder = ladderFromLoadKg(routineTemplate, kit);
+  const progressionLadder =
+    prefill.progressionWorkingLoadKg != null
+      ? ladderFromLoadKg(prefill.progressionWorkingLoadKg, kit)
+      : {
+          nextAvailableLoadKg: null,
+          previousAvailableLoadKg: null,
+          loadJumpPercent: null,
+        };
+
   return {
     routineTemplateLoadKg: routineTemplate,
-    progressionWorkingLoadKg,
-    progressionLoadSource,
+    progressionWorkingLoadKg: prefill.progressionWorkingLoadKg,
+    progressionLoadSource: prefill.progressionLoadSource,
+    progressionPrefillLoadsKg: prefill.progressionPrefillLoadsKg,
+    progressionWorkingLoadUniform: prefill.progressionWorkingLoadUniform,
     loadSemantics: semantics.loadSemantics,
     implementsPerSet: semantics.implementsPerSet,
+    templateLadderReference: "routine_template",
+    progressionLadderReference:
+      prefill.progressionWorkingLoadKg != null ? "progression_working_load" : null,
+    progressionNextAvailableLoadKg: progressionLadder.nextAvailableLoadKg,
+    progressionPreviousAvailableLoadKg: progressionLadder.previousAvailableLoadKg,
+    progressionLoadJumpPercent: progressionLadder.loadJumpPercent,
+    templateNextAvailableLoadKg: templateLadder.nextAvailableLoadKg,
+    templatePreviousAvailableLoadKg: templateLadder.previousAvailableLoadKg,
+    templateLoadJumpPercent: templateLadder.loadJumpPercent,
   };
 }
