@@ -156,10 +156,218 @@ test("bodyweight_offset prefill can be 0 kg (valid), not unavailable", () => {
 });
 
 test("implementsPerSet: verified 0289/0334 only; ambiguous exercises stay null", () => {
-  assert.equal(classifyLoadSemantics(LATERAL, "0334").implementsPerSet, 2);
-  assert.equal(classifyLoadSemantics(TRICEPS, "2188").implementsPerSet, null);
-  assert.equal(classifyLoadSemantics(DB_BENCH, "0289").loadSemantics, "per_implement");
-  assert.equal(classifyLoadSemantics({ id: "0285", side: true }, "0285").implementsPerSet, null);
+  assert.equal(classifyLoadSemantics(null, LATERAL, "0334").implementsPerSet, 2);
+  assert.equal(classifyLoadSemantics(null, TRICEPS, "2188").implementsPerSet, null);
+  assert.equal(classifyLoadSemantics(null, DB_BENCH, "0289").loadSemantics, "per_implement");
+  assert.equal(classifyLoadSemantics(null, DB_BENCH, "0289").loadSemanticsSource, "catalogue");
+  assert.equal(classifyLoadSemantics(null, { id: "0285", side: true }, "0285").implementsPerSet, null);
+});
+
+test("owner-verified custom exercise reports per_implement without name heuristics", () => {
+  const customId = "test-custom-dumbbell-move";
+  const state = {
+    unit: "kg",
+    customEx: [
+      {
+        id: customId,
+        n: "Dumbbell Fancy Curl",
+        bp: "arms",
+        eq: "custom",
+        custom: true,
+        verifiedLoadSemantics: "per_implement",
+        verifiedImplementsPerSet: 1,
+      },
+    ],
+    workouts: [],
+    exWeights: {},
+  };
+  const cfg = { id: customId, sets: 3, reps: 10, weight: 15 };
+  const semantics = classifyLoadSemantics(state, cfg, customId);
+  assert.equal(semantics.loadSemantics, "per_implement");
+  assert.equal(semantics.loadSemanticsSource, "owner_verified");
+  assert.equal(semantics.implementsPerSet, 1);
+  const enriched = enrichExerciseLoadFields(state, cfg);
+  assert.equal(enriched.loadSemantics, "per_implement");
+  assert.equal(enriched.loadSemanticsSource, "owner_verified");
+});
+
+test("unverified custom exercise with dumbbell in name stays unknown", () => {
+  const customId = "test-custom-unverified";
+  const state = {
+    customEx: [
+      {
+        id: customId,
+        n: "Cross-Body Dumbbell Hammer Curl",
+        eq: "custom",
+        custom: true,
+      },
+    ],
+  };
+  const semantics = classifyLoadSemantics(state, { id: customId, sets: 2, weight: 13 }, customId);
+  assert.equal(semantics.loadSemantics, "unknown");
+  assert.equal(semantics.loadSemanticsSource, "unknown");
+});
+
+test("revoked owner verification falls back to unknown for custom exercises", () => {
+  const customId = "test-custom-revoked";
+  const state = {
+    customEx: [{ id: customId, n: "Formerly verified", eq: "custom", custom: true }],
+  };
+  const semantics = classifyLoadSemantics(state, { id: customId, sets: 2, weight: 10 }, customId);
+  assert.equal(semantics.loadSemantics, "unknown");
+  assert.equal(semantics.loadSemanticsSource, "unknown");
+});
+
+test("routine slot verifiedLoadSemantics overrides customEx metadata", () => {
+  const customId = "test-slot-override";
+  const state = {
+    customEx: [
+      {
+        id: customId,
+        n: "Custom move",
+        eq: "custom",
+        verifiedLoadSemantics: "per_implement",
+        verifiedImplementsPerSet: 2,
+      },
+    ],
+  };
+  const cfg = {
+    id: customId,
+    sets: 3,
+    reps: 8,
+    weight: 20,
+    verifiedLoadSemantics: "barbell_total",
+  };
+  const semantics = classifyLoadSemantics(state, cfg, customId);
+  assert.equal(semantics.loadSemantics, "barbell_total");
+  assert.equal(semantics.loadSemanticsSource, "owner_verified");
+  assert.equal(semantics.implementsPerSet, null);
+});
+
+test("slot per_implement does not inherit stale custom implement count", () => {
+  const customId = "test-slot-per-implement";
+  const state = {
+    customEx: [
+      {
+        id: customId,
+        n: "Custom move",
+        eq: "custom",
+        verifiedLoadSemantics: "barbell_total",
+        verifiedImplementsPerSet: 2,
+      },
+    ],
+  };
+  const cfg = {
+    id: customId,
+    sets: 3,
+    reps: 8,
+    weight: 20,
+    verifiedLoadSemantics: "per_implement",
+  };
+  const semantics = classifyLoadSemantics(state, cfg, customId);
+  assert.equal(semantics.loadSemantics, "per_implement");
+  assert.equal(semantics.implementsPerSet, null);
+});
+
+test("slot per_implement uses only slot-verified implement count", () => {
+  const customId = "test-slot-explicit-count";
+  const state = {
+    customEx: [
+      {
+        id: customId,
+        n: "Custom move",
+        eq: "custom",
+        verifiedLoadSemantics: "per_implement",
+        verifiedImplementsPerSet: 1,
+      },
+    ],
+  };
+  const cfg = {
+    id: customId,
+    sets: 3,
+    reps: 8,
+    weight: 20,
+    verifiedLoadSemantics: "per_implement",
+    verifiedImplementsPerSet: 2,
+  };
+  const semantics = classifyLoadSemantics(state, cfg, customId);
+  assert.equal(semantics.implementsPerSet, 2);
+});
+
+test("parseVerifiedImplementsPerSet rejects coerced non-numeric values", () => {
+  const customId = "test-invalid-implements";
+  const state = {
+    customEx: [
+      {
+        id: customId,
+        n: "Custom move",
+        eq: "custom",
+        verifiedLoadSemantics: "per_implement",
+        verifiedImplementsPerSet: true,
+      },
+    ],
+  };
+  const semantics = classifyLoadSemantics(state, { id: customId }, customId);
+  assert.equal(semantics.loadSemantics, "per_implement");
+  assert.equal(semantics.implementsPerSet, null);
+
+  const stateString = {
+    customEx: [
+      {
+        id: customId,
+        n: "Custom move",
+        eq: "custom",
+        verifiedLoadSemantics: "per_implement",
+        verifiedImplementsPerSet: "2",
+      },
+    ],
+  };
+  assert.equal(
+    classifyLoadSemantics(stateString, { id: customId }, customId).implementsPerSet,
+    2,
+  );
+  assert.equal(
+    classifyLoadSemantics(
+      {
+        customEx: [
+          {
+            id: customId,
+            verifiedLoadSemantics: "per_implement",
+            verifiedImplementsPerSet: "2.5",
+          },
+        ],
+      },
+      { id: customId },
+      customId,
+    ).implementsPerSet,
+    null,
+  );
+});
+
+test("invalid owner verified semantics values are ignored", () => {
+  const customId = "test-invalid-verified";
+  const state = {
+    customEx: [
+      {
+        id: customId,
+        n: "Bad metadata",
+        eq: "custom",
+        verifiedLoadSemantics: "pair_total",
+      },
+    ],
+  };
+  const semantics = classifyLoadSemantics(state, { id: customId, sets: 2, weight: 5 }, customId);
+  assert.equal(semantics.loadSemantics, "unknown");
+  assert.equal(semantics.loadSemanticsSource, "unknown");
+});
+
+test("0289 progression 36 kg remains per_implement catalogue semantics", () => {
+  const state = stale0289State(36);
+  const enriched = enrichExerciseLoadFields(state, DB_BENCH);
+  assert.equal(enriched.progressionWorkingLoadKg, 36);
+  assert.equal(enriched.loadSemantics, "per_implement");
+  assert.equal(enriched.loadSemanticsSource, "catalogue");
+  assert.equal(enriched.implementsPerSet, 2);
 });
 
 test("exWeights beats last set beats template precedence", () => {
