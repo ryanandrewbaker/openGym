@@ -235,6 +235,8 @@ describe("MASIS-157 full v2 frozen prescription", () => {
       (x) => { x.exercises[0].prefillLoadsKg = [10, "14"]; },
       (x) => { x.exercises[0].prefillLoadsKg = [10, -2]; },
       (x) => { x.exercises[0].sets = "2"; },
+      (x) => { x.exercises[0].sets = 101; },
+      (x) => { x.exercises[0].repsMax = 1001; },
       (x) => { x.exercises[0].repsMin = 0; },
       (x) => { x.exercises[1].prefillLoadsKg = [35, 36, 36]; },
       (x) => { x.exercises[1].loadKg = null; },
