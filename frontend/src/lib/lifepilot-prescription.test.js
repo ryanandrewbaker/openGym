@@ -183,3 +183,71 @@ describe("applyLifePilotPrescription", () => {
     expect(out[1].r).toBe(8);
   });
 });
+
+
+describe("MASIS-157 full v2 frozen prescription", () => {
+  const full = () => ({
+    prescriptionContractVersion: 2,
+    prescriptionCoverage: "full",
+    exercises: [
+      { exerciseId: LATERAL, sets: 2, repsMin: 8, repsMax: 12, prefillLoadsKg: [10, 14] },
+      { exerciseId: BENCH, sets: 3, repsMin: 8, repsMax: 8, loadKg: 36, prefillLoadsKg: [36, 36, 36] },
+      { exerciseId: CURL, sets: 2, repsMin: 10, repsMax: 12, prefillLoadsKg: [null, 15] },
+    ],
+  });
+
+  const forbidden = () => ({
+    nextPrescription: vi.fn(() => { throw new Error("live progression must not run"); }),
+    buildSets: vi.fn(() => { throw new Error("live buildSets must not run"); }),
+    applyPrescription: vi.fn(() => { throw new Error("live applyPrescription must not run"); }),
+  });
+
+  it("preserves heterogeneous per-index loads, null as unset, rep targets, order, and supersets", () => {
+    const state = openGymState();
+    const old = JSON.stringify(state);
+    const config = { ...routine, ex: routine.ex.map((cfg, i) => ({ ...cfg, ...(i < 2 ? { sg: "pair" } : {}) })) };
+    const helpers = forbidden();
+    const entries = buildWorkoutEntries(state, config, full(), helpers);
+    expect(entries.map((e) => e.id)).toEqual([LATERAL, BENCH, CURL]);
+    expect(entries[0].sets.map((set) => set.w)).toEqual([10, 14]);
+    expect(entries[0].target.weight).toBeUndefined();
+    expect(entries[0].target.repsMin).toBe(8);
+    expect(entries[0].target.repsMax).toBe(12);
+    expect(entries[0].sg).toBe("pair");
+    expect(entries[1].sg).toBe("pair");
+    expect(entries[1].sets.map((set) => set.w)).toEqual([36, 36, 36]);
+    expect(entries[1].target.weight).toBe(36);
+    expect(entries[2].sets[0]).toEqual({ r: 10, done: false });
+    expect(entries[2].sets[1]).toEqual({ w: 15, r: 10, done: false });
+    expect(JSON.stringify(state)).toBe(old);
+    for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed v2 full snapshots without running progression", () => {
+    const bad = [
+      (x) => { x.prescriptionContractVersion = 3; },
+      (x) => { x.prescriptionCoverage = "partial"; },
+      (x) => { x.exercises.pop(); },
+      (x) => { x.exercises.reverse(); },
+      (x) => { x.exercises[1].exerciseId = LATERAL; },
+      (x) => { x.exercises[1].exerciseId = "unknown"; },
+      (x) => { x.exercises[0].prefillLoadsKg = [10]; },
+      (x) => { x.exercises[0].prefillLoadsKg = [10, "14"]; },
+      (x) => { x.exercises[0].prefillLoadsKg = [10, -2]; },
+      (x) => { x.exercises[0].sets = "2"; },
+      (x) => { x.exercises[0].repsMin = 0; },
+      (x) => { x.exercises[1].prefillLoadsKg = [35, 36, 36]; },
+      (x) => { x.exercises[1].loadKg = null; },
+      (x) => { x.exercises[2].prefillLoadsKg = [null, Infinity]; },
+      (x) => { x.exercises[1].unknownField = 99; },
+    ];
+    for (const mutate of bad) {
+      const value = full();
+      mutate(value);
+      const helpers = forbidden();
+      expect(() => buildWorkoutEntries(openGymState(), routine, value, helpers))
+        .toThrow("invalid_v2_prescription");
+      for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+    }
+  });
+});
