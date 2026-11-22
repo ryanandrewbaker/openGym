@@ -22,6 +22,7 @@ import {
   scheduleWriteConflicts,
 } from "./lifepilot-schedule.js";
 import { enrichExerciseLoadFields } from "../lib/routine-exercise-loads.js";
+import { validateFullV2SessionPrescription } from "./lifepilot-prescription-v2.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
 const SERVICE_SECRET = process.env.LIFEPILOT_OPENGYM_SERVICE_SECRET || process.env.OPENGYM_SERVICE_SECRET || "";
@@ -541,7 +542,6 @@ export function registerLifePilotRoutes(routes, deps) {
 
   routes["POST /integrations/lifepilot/session"] = async (req, res) => {
     if (!verifyServiceAuth(req)) return json(res, 401, { error: "unauthorized" });
-    schedulePendingFlush(completionRelay);
     const body = await readBody(req);
     const openGymUserId = String(body.openGymUserId || "");
     const profileId = String(body.profileId || "");
@@ -554,6 +554,23 @@ export function registerLifePilotRoutes(routes, deps) {
     const user = db.users.find((u) => u.id === openGymUserId && u.lifepilotProfileId === profileId);
     if (!user) return json(res, 404, { error: "user not found" });
 
+    // v2 is a complete frozen snapshot. Validate the entire routine before
+    // signing the token; never sanitize/coerce a malformed v2 into a partial v1.
+    let prescription;
+    if (body.prescription != null && !Array.isArray(body.prescription)) {
+      const state = readState(user.id);
+      const routine = (state?.routines || []).find((item) => String(item.id) === routineId);
+      if (!routine) return json(res, 404, { error: "routine_not_found" });
+      try {
+        prescription = validateFullV2SessionPrescription(body.prescription, routine);
+      } catch {
+        return json(res, 400, { error: "invalid_v2_prescription" });
+      }
+    } else {
+      prescription = sanitizeSessionPrescription(body.prescription);
+    }
+
+    schedulePendingFlush(completionRelay);
     const exp = Date.now() + 5 * 60 * 1000;
     const token = signBridgeToken({
       mode: "workout",
@@ -563,7 +580,7 @@ export function registerLifePilotRoutes(routes, deps) {
       routineId,
       wellnessOccurrenceId: body.wellnessOccurrenceId || null,
       bodyweightKg: body.bodyweightKg != null ? Number(body.bodyweightKg) : null,
-      prescription: sanitizeSessionPrescription(body.prescription),
+      prescription,
       exp,
     });
 
