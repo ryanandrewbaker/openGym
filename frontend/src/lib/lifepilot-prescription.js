@@ -1,89 +1,15 @@
 import { applyPrescription } from "./progression.js";
+import {
+  INVALID_V2_PRESCRIPTION,
+  routineShapeForV2Validation,
+  validateFullV2SessionPrescription,
+} from "./lifepilot-prescription-v2-validate.js";
 
-// Pure, strict v2 contract validation mirrors the API validator. Both the
-// signed-token endpoint and native embed must fail closed before workout writes.
-const INVALID = "invalid_v2_prescription";
-const EXERCISE_FIELDS = new Set([
-  "exerciseId", "sets", "repsMin", "repsMax", "loadKg", "prefillLoadsKg",
-]);
-const TOP_FIELDS = new Set([
-  "prescriptionContractVersion", "prescriptionCoverage", "exercises",
-]);
-
-const record = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-const exactFields = (value, allowed) =>
-  Object.keys(value).every((key) => allowed.has(key));
-const positiveInt = (value, max) =>
-  Number.isSafeInteger(value) && value > 0 && value <= max;
-const validLoad = (value) =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
-
-export function validateFullV2SessionPrescription(value, routine) {
-  if (
-    !record(value) ||
-    !exactFields(value, TOP_FIELDS) ||
-    value.prescriptionContractVersion !== 2 ||
-    value.prescriptionCoverage !== "full" ||
-    !Array.isArray(value.exercises) ||
-    !Array.isArray(routine?.ex) ||
-    routine.ex.length === 0 ||
-    value.exercises.length !== routine.ex.length
-  ) {
-    throw new Error(INVALID);
-  }
-
-  const seen = new Set();
-  const exercises = value.exercises.map((exercise, index) => {
-    const expectedId = String(routine.ex[index]?.id ?? "");
-    if (
-      !record(exercise) ||
-      !exactFields(exercise, EXERCISE_FIELDS) ||
-      typeof exercise.exerciseId !== "string" ||
-      !exercise.exerciseId.trim() ||
-      exercise.exerciseId !== expectedId ||
-      seen.has(exercise.exerciseId) ||
-      !positiveInt(exercise.sets, 100) ||
-      !positiveInt(exercise.repsMin, 1000) ||
-      !positiveInt(exercise.repsMax, 1000) ||
-      exercise.repsMax < exercise.repsMin
-    ) {
-      throw new Error(INVALID);
-    }
-    seen.add(exercise.exerciseId);
-
-    const hasScalar = Object.hasOwn(exercise, "loadKg");
-    const hasPerSet = Object.hasOwn(exercise, "prefillLoadsKg");
-    if (hasScalar && !validLoad(exercise.loadKg)) {
-      throw new Error(INVALID);
-    }
-    if (hasPerSet) {
-      if (
-        !Array.isArray(exercise.prefillLoadsKg) ||
-        exercise.prefillLoadsKg.length !== exercise.sets ||
-        !exercise.prefillLoadsKg.every((load) => load === null || validLoad(load)) ||
-        (hasScalar && !exercise.prefillLoadsKg.every((load) => load === exercise.loadKg))
-      ) {
-        throw new Error(INVALID);
-      }
-    }
-
-    return {
-      exerciseId: exercise.exerciseId,
-      sets: exercise.sets,
-      repsMin: exercise.repsMin,
-      repsMax: exercise.repsMax,
-      ...(hasScalar ? { loadKg: exercise.loadKg } : {}),
-      ...(hasPerSet ? { prefillLoadsKg: [...exercise.prefillLoadsKg] } : {}),
-    };
-  });
-
-  return {
-    prescriptionContractVersion: 2,
-    prescriptionCoverage: "full",
-    exercises,
-  };
-}
+export {
+  INVALID_V2_PRESCRIPTION,
+  routineShapeForV2Validation,
+  validateFullV2SessionPrescription,
+} from "./lifepilot-prescription-v2-validate.js";
 
 
 export function findLifePilotPrescription(prescriptions, exerciseId) {
@@ -145,16 +71,19 @@ export function buildEntryFromLifePilotPrescription(cfg, prescription, { v2 = fa
   } else {
     delete target.weight;
   }
+  const plan = {
+    kind: "lifepilot",
+    reps: repsMin,
+    sets: setsCount,
+  };
+  if (loadKg != null && Number.isFinite(loadKg)) {
+    plan.weight = loadKg;
+  }
   return {
     id: cfg.id,
     sg: cfg.sg,
     target,
-    plan: {
-      kind: "lifepilot",
-      weight: loadKg,
-      reps: repsMin,
-      sets: setsCount,
-    },
+    plan,
     sets: buildSetsFromLifePilotPrescription({
       sets: setsCount,
       loadKg,
@@ -165,12 +94,18 @@ export function buildEntryFromLifePilotPrescription(cfg, prescription, { v2 = fa
   };
 }
 
-export function buildWorkoutEntries(st, routine, prescriptionList, helpers) {
+export function buildWorkoutEntries(st, routine, prescriptionList, helpers, { externalSessionId = null } = {}) {
   // A full-v2 plan must cover the routine *before* any entries are built.
   // Never fall through to OpenGym progression for an omitted frozen slot.
   if (prescriptionList != null && !Array.isArray(prescriptionList)) {
-    const full = validateFullV2SessionPrescription(prescriptionList, routine);
-    return routine.ex.map((cfg, index) =>
+    if (!routine?.ex?.length) {
+      throw new Error(INVALID_V2_PRESCRIPTION);
+    }
+    const validated = routineShapeForV2Validation(st, routine, externalSessionId);
+    const full = validateFullV2SessionPrescription(prescriptionList, validated);
+    const templateById = new Map((routine.ex || []).map((cfg) => [String(cfg.id), cfg]));
+    const ordered = (validated.ex || []).map((slot) => templateById.get(String(slot.id)) || slot);
+    return ordered.map((cfg, index) =>
       buildEntryFromLifePilotPrescription(cfg, full.exercises[index], { v2: true }));
   }
   const { nextPrescription, applyPrescription: apply, buildSets } = helpers;

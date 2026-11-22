@@ -873,11 +873,25 @@ export function beginWorkout(routineId, bw, opts = {}) {
   // LifePilot may pass a canonical prescription. When it is present, those entries skip
   // nextPrescription() so Today, review, and the session all use the same targets.
   const prescriptionList = opts.prescription ?? getLpContext()?.prescription ?? null
-  const entries = buildWorkoutEntries(st, r, prescriptionList, {
-    nextPrescription,
-    applyPrescription,
-    buildSets,
-  })
+  if (isLpMode() && !r) {
+    console.error("LifePilot beginWorkout: routine not found", routineId)
+    return false
+  }
+  let entries
+  try {
+    entries = buildWorkoutEntries(st, r, prescriptionList, {
+      nextPrescription,
+      applyPrescription,
+      buildSets,
+    }, { externalSessionId: opts.sessionId ?? null })
+  } catch (err) {
+    if (isLpMode() && err?.message === "invalid_v2_prescription") {
+      console.error("LifePilot beginWorkout: invalid frozen v2 prescription", err)
+      useUI.getState().toast(t("Could not start workout — prescription is invalid."))
+      return false
+    }
+    throw err
+  }
   const now = Date.now()
   update(s => {
     const sameSession = opts.sessionId && s.active?.id === opts.sessionId && s.active.start

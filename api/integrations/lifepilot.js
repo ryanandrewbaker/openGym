@@ -22,7 +22,10 @@ import {
   scheduleWriteConflicts,
 } from "./lifepilot-schedule.js";
 import { enrichExerciseLoadFields } from "../lib/routine-exercise-loads.js";
-import { validateFullV2SessionPrescription } from "./lifepilot-prescription-v2.js";
+import {
+  routineShapeForV2Validation,
+  validateFullV2SessionPrescription,
+} from "./lifepilot-prescription-v2.js";
 
 const LIFEPILOT_MODE = /^(1|true|yes|on)$/i.test(process.env.LIFEPILOT_MODE || "");
 const SERVICE_SECRET = process.env.LIFEPILOT_OPENGYM_SERVICE_SECRET || process.env.OPENGYM_SERVICE_SECRET || "";
@@ -560,15 +563,8 @@ export function registerLifePilotRoutes(routes, deps) {
     if (body.prescription != null && !Array.isArray(body.prescription)) {
       const state = readState(user.id);
       const template = (state?.routines || []).find((item) => String(item.id) === routineId);
-      // On an actual same-session resume, the already-started workout is the
-      // source of exercise coverage/order. The live routine may have changed.
-      const active = state?.active;
-      const frozenSession = active?.id === externalSessionId &&
-        String(active.routineId) === routineId && Array.isArray(active.entries)
-        ? { ex: active.entries.map((entry) => ({ id: entry.id })) }
-        : null;
-      const routine = frozenSession || template;
-      if (!routine) return json(res, 404, { error: "routine_not_found" });
+      if (!template) return json(res, 404, { error: "routine_not_found" });
+      const routine = routineShapeForV2Validation(state, template, externalSessionId);
       try {
         prescription = validateFullV2SessionPrescription(body.prescription, routine);
       } catch {

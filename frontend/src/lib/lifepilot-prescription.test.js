@@ -219,8 +219,49 @@ describe("MASIS-157 full v2 frozen prescription", () => {
     expect(entries[1].target.weight).toBe(36);
     expect(entries[2].sets[0]).toEqual({ r: 10, done: false });
     expect(entries[2].sets[1]).toEqual({ w: 15, r: 10, done: false });
+    expect(entries[0].plan.weight).toBeUndefined();
     expect(JSON.stringify(state)).toBe(old);
     for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("allows a full v2 exercise with neither loadKg nor prefillLoadsKg (all sets unset)", () => {
+    const state = openGymState();
+    const payload = full();
+    delete payload.exercises[2].prefillLoadsKg;
+    const helpers = forbidden();
+    const entries = buildWorkoutEntries(state, routine, payload, helpers);
+    expect(entries[2].sets.every((set) => set.w === undefined)).toBe(true);
+    expect(entries[2].plan.weight).toBeUndefined();
+    for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("validates v2 against frozen active entry order when resuming the same session", () => {
+    const state = openGymState();
+    const reordered = { ...routine, ex: [...routine.ex].reverse() };
+    const frozenOrder = [...routine.ex];
+    const prescription = {
+      prescriptionContractVersion: 2,
+      prescriptionCoverage: "full",
+      exercises: frozenOrder.map((cfg) => ({
+        exerciseId: cfg.id,
+        sets: cfg.sets,
+        repsMin: 8,
+        repsMax: 12,
+        prefillLoadsKg: Array(cfg.sets).fill(10),
+      })),
+    };
+    state.active = {
+      id: "ext-resume",
+      routineId: routine.id,
+      entries: frozenOrder.map((cfg) => ({ id: cfg.id, sets: [] })),
+    };
+    const helpers = forbidden();
+    expect(() =>
+      buildWorkoutEntries(state, reordered, prescription, helpers, { externalSessionId: "ext-resume" }),
+    ).not.toThrow();
+    expect(() =>
+      buildWorkoutEntries(state, reordered, prescription, helpers, { externalSessionId: "new-session" }),
+    ).toThrow("invalid_v2_prescription");
   });
 
   it("rejects malformed v2 full snapshots without running progression", () => {
