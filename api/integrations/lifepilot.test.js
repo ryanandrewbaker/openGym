@@ -583,3 +583,47 @@ test("MASIS-157 malformed v2 full snapshots return 400 without any state writes 
     assert.equal(fs.readFileSync(file, "utf8"), before);
   }
 });
+
+
+test("MASIS-157 same-session token replay validates the saved active order after routine edits", async () => {
+  const { call, dataDir } = makeHarness();
+  const profileId = "profile-v2-resume";
+  const provisioned = await call("POST /integrations/lifepilot/provision", { profileId });
+  const openGymUserId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+  const file = path.join(dataDir, `state-${openGymUserId}.json`);
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  const original = state.routines.find((r) => r.id === routineId).ex;
+  const frozen = {
+    prescriptionContractVersion: 2,
+    prescriptionCoverage: "full",
+    exercises: original.map((e) => ({
+      exerciseId: e.id, sets: e.sets, repsMin: e.reps, repsMax: e.reps,
+      prefillLoadsKg: Array(e.sets).fill(10),
+    })),
+  };
+  frozen.exercises[0].prefillLoadsKg = Array(original[0].sets).fill(null);
+  state.active = {
+    id: "ext-frozen",
+    routineId,
+    d: "2026-11-22",
+    start: Date.now() - 1000,
+    entries: original.map((e) => ({ id: e.id, sets: [{ done: false }] })),
+  };
+  state.routines.find((r) => r.id === routineId).ex = original.slice(1).reverse();
+  fs.writeFileSync(file, JSON.stringify(state));
+  const before = fs.readFileSync(file, "utf8");
+  const session = await call("POST /integrations/lifepilot/session", {
+    profileId, openGymUserId, routineId, externalSessionId: "ext-frozen", prescription: frozen,
+  });
+  assert.equal(session.status, 200);
+  const exchanged = await call("POST /integrations/lifepilot/exchange-token", { token: session.body.token }, { auth: false });
+  assert.deepEqual(exchanged.body.context.prescription, frozen);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  const different = await call("POST /integrations/lifepilot/session", {
+    profileId, openGymUserId, routineId, externalSessionId: "new-unknown-session", prescription: frozen,
+  });
+  assert.equal(different.status, 400);
+  assert.equal(different.body.error, "invalid_v2_prescription");
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
