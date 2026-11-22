@@ -36,6 +36,27 @@ describe("shouldBeginEmbeddedWorkout", () => {
     return { begin, action, activeSnapshot: JSON.stringify(active) };
   }
 
+  it("notifies without rebuilding when the live routine was deleted but frozen active remains", () => {
+    const active = {
+      id: "session-deleted-routine",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T12:00:00.000Z"),
+      entries: [
+        {
+          id: "0405",
+          sg: "pair",
+          sets: [{ w: 10, r: 8, done: true }, { w: 14, r: 8, done: false }],
+        },
+      ],
+    };
+    const ctx = frozenV2Ctx("session-deleted-routine");
+    expect(resumeDecision(ctx, active, "2026-09-25")).toMatchObject({
+      begin: false,
+      action: "notify",
+    });
+  });
+
   it("preserves a v2 workout resumed after midnight when sets were already completed", () => {
     const active = {
       id: "session-midnight",

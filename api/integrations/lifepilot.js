@@ -23,7 +23,7 @@ import {
 } from "./lifepilot-schedule.js";
 import { enrichExerciseLoadFields } from "../lib/routine-exercise-loads.js";
 import {
-  routineShapeForV2Validation,
+  resolveV2ValidationRoutine,
   validateFullV2SessionPrescription,
 } from "./lifepilot-prescription-v2.js";
 
@@ -562,9 +562,8 @@ export function registerLifePilotRoutes(routes, deps) {
     let prescription;
     if (body.prescription != null && !Array.isArray(body.prescription)) {
       const state = readState(user.id);
-      const template = (state?.routines || []).find((item) => String(item.id) === routineId);
-      if (!template) return json(res, 404, { error: "routine_not_found" });
-      const routine = routineShapeForV2Validation(state, template, externalSessionId);
+      const routine = resolveV2ValidationRoutine(state, routineId, externalSessionId);
+      if (!routine) return json(res, 404, { error: "routine_not_found" });
       try {
         prescription = validateFullV2SessionPrescription(body.prescription, routine);
       } catch {

@@ -627,3 +627,126 @@ test("MASIS-157 same-session token replay validates the saved active order after
   assert.equal(different.body.error, "invalid_v2_prescription");
   assert.equal(fs.readFileSync(file, "utf8"), before);
 });
+
+test("MASIS-157 v2 session token succeeds after live routine deleted with matching frozen active", async () => {
+  const { call, dataDir } = makeHarness();
+  const profileId = "profile-v2-deleted-routine";
+  const provisioned = await call("POST /integrations/lifepilot/provision", { profileId });
+  const openGymUserId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+  const file = path.join(dataDir, `state-${openGymUserId}.json`);
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  const slotOrder = state.routines.find((r) => r.id === routineId).ex;
+  const frozen = {
+    prescriptionContractVersion: 2,
+    prescriptionCoverage: "full",
+    exercises: slotOrder.map((e) => ({
+      exerciseId: e.id,
+      sets: e.sets,
+      repsMin: e.reps,
+      repsMax: e.reps,
+      prefillLoadsKg: Array(e.sets).fill(10),
+    })),
+  };
+  frozen.exercises[0].prefillLoadsKg = Array(slotOrder[0].sets).fill(10);
+  frozen.exercises[0].prefillLoadsKg[1] = 14;
+  state.active = {
+    id: "ext-still-active",
+    routineId,
+    d: "2026-11-22",
+    start: Date.now() - 5000,
+    entries: slotOrder.map((e, i) => ({
+      id: e.id,
+      sg: i === 0 ? "pair" : undefined,
+      sets: i === 0 ? [{ w: 10, r: 8, done: true }, { w: 14, r: 8, done: false }] : [{ done: false }],
+    })),
+  };
+  state.routines = state.routines.filter((r) => r.id !== routineId);
+  fs.writeFileSync(file, JSON.stringify(state));
+  const before = fs.readFileSync(file, "utf8");
+  const session = await call("POST /integrations/lifepilot/session", {
+    profileId,
+    openGymUserId,
+    routineId,
+    externalSessionId: "ext-still-active",
+    prescription: frozen,
+  });
+  assert.equal(session.status, 200);
+  assert.ok(session.body.token);
+  const exchanged = await call(
+    "POST /integrations/lifepilot/exchange-token",
+    { token: session.body.token },
+    { auth: false },
+  );
+  assert.equal(exchanged.status, 200);
+  assert.deepEqual(
+    exchanged.body.context.prescription.exercises[0].prefillLoadsKg,
+    frozen.exercises[0].prefillLoadsKg,
+  );
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("MASIS-157 rejects v2 session when routine is gone and active session does not match", async () => {
+  const { call, dataDir } = makeHarness();
+  const profileId = "profile-v2-no-active";
+  const provisioned = await call("POST /integrations/lifepilot/provision", { profileId });
+  const openGymUserId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+  const file = path.join(dataDir, `state-${openGymUserId}.json`);
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  const slotOrder = state.routines.find((r) => r.id === routineId).ex;
+  const frozen = {
+    prescriptionContractVersion: 2,
+    prescriptionCoverage: "full",
+    exercises: slotOrder.map((e) => ({
+      exerciseId: e.id, sets: e.sets, repsMin: e.reps, repsMax: e.reps,
+    })),
+  };
+  state.routines = state.routines.filter((r) => r.id !== routineId);
+  state.active = {
+    id: "other-session",
+    routineId,
+    entries: slotOrder.map((e) => ({ id: e.id, sets: [] })),
+  };
+  fs.writeFileSync(file, JSON.stringify(state));
+  const before = fs.readFileSync(file, "utf8");
+  const session = await call("POST /integrations/lifepilot/session", {
+    profileId,
+    openGymUserId,
+    routineId,
+    externalSessionId: "unknown-session",
+    prescription: frozen,
+  });
+  assert.equal(session.status, 404);
+  assert.equal(session.body.error, "routine_not_found");
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("MASIS-157 v1 session token is unchanged when live routine was deleted", async () => {
+  const { call, dataDir } = makeHarness();
+  const profileId = "profile-v1-deleted";
+  const provisioned = await call("POST /integrations/lifepilot/provision", { profileId });
+  const openGymUserId = provisioned.body.openGymUserId;
+  const routineId = provisioned.body.routines[0].openGymRoutineId;
+  const file = path.join(dataDir, `state-${openGymUserId}.json`);
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  state.routines = state.routines.filter((r) => r.id !== routineId);
+  fs.writeFileSync(file, JSON.stringify(state));
+  const before = fs.readFileSync(file, "utf8");
+  const prescription = [{ exerciseId: "0025", sets: 3, loadKg: 30, repsMin: 8, repsMax: 12 }];
+  const session = await call("POST /integrations/lifepilot/session", {
+    profileId,
+    openGymUserId,
+    routineId,
+    externalSessionId: "ext-v1",
+    prescription,
+  });
+  assert.equal(session.status, 200);
+  const exchanged = await call(
+    "POST /integrations/lifepilot/exchange-token",
+    { token: session.body.token },
+    { auth: false },
+  );
+  assert.deepEqual(exchanged.body.context.prescription, prescription);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});

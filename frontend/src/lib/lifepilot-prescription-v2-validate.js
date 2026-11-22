@@ -103,3 +103,25 @@ export function routineShapeForV2Validation(state, routine, externalSessionId) {
   }
   return routine;
 }
+
+/**
+ * v2 bridge: use live template order, or when the template was deleted, only the
+ * authenticated same-session frozen active workout's exercise order.
+ */
+export function resolveV2ValidationRoutine(state, routineId, externalSessionId) {
+  const template = (state?.routines || []).find((item) => String(item.id) === routineId);
+  if (template) {
+    return routineShapeForV2Validation(state, template, externalSessionId);
+  }
+  const active = state?.active;
+  if (
+    externalSessionId &&
+    active?.id === externalSessionId &&
+    String(active.routineId) === routineId &&
+    Array.isArray(active.entries) &&
+    active.entries.length > 0
+  ) {
+    return { id: routineId, ex: active.entries.map((entry) => ({ id: entry.id })) };
+  }
+  return null;
+}
