@@ -556,6 +556,8 @@ test("MASIS-157 malformed v2 full snapshots return 400 without any state writes 
     (x) => { x.exercises[1].exerciseId = x.exercises[0].exerciseId; },
     (x) => { x.exercises[0].exerciseId = "unknown"; },
     (x) => { x.exercises[0].sets = "3"; },
+    (x) => { x.exercises[0].sets = 101; },
+    (x) => { x.exercises[0].repsMax = 1001; },
     (x) => { x.exercises[0].sets = 0; },
     (x) => { x.exercises[0].repsMin = NaN; },
     (x) => { x.exercises[0].repsMax = 0; },
