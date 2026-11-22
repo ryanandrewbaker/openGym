@@ -13,8 +13,10 @@ export function shouldBeginEmbeddedWorkout(ctx, active, today = null) {
   if (today && active.d && active.d !== today) return true;
   if (active.routineId && String(active.routineId) !== String(ctx.routineId)) return true;
   if (!ctx.externalSessionId || active.id !== ctx.externalSessionId) return true;
-  // Same day, same routine, same LifePilot session: still rebuild when nothing
-  // has been logged, so later plan edits (removed incline row / shrugs) apply.
+  // v2 is frozen by MASIS at start. Even an unused same-session workout must
+  // retain its existing snapshot rather than recompute on an embed refresh.
+  // Preserve the historical rebuild behaviour for legacy v1 sessions.
+  if (ctx.prescription?.prescriptionContractVersion === 2) return false;
   return !activeWorkoutHasCompletedSet(active);
 }
 
