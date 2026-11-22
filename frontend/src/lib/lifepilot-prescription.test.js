@@ -81,6 +81,7 @@ describe("buildWorkoutEntries", () => {
     );
     expect(entry.sets[0].w).toBeUndefined();
     expect(entry.target.weight).toBeUndefined();
+    expect(entry.plan.weight).toBeNull();
   });
 
   it("uses nextPrescription when no LifePilot prescription is present", () => {
@@ -232,6 +233,34 @@ describe("MASIS-157 full v2 frozen prescription", () => {
     const entries = buildWorkoutEntries(state, routine, payload, helpers);
     expect(entries[2].sets.every((set) => set.w === undefined)).toBe(true);
     expect(entries[2].plan.weight).toBeUndefined();
+    for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds frozen cfg from active entries when a slot was removed from the live routine", () => {
+    const state = openGymState();
+    const config = { ...routine, ex: routine.ex.map((cfg, i) => ({ ...cfg, ...(i < 2 ? { sg: "pair" } : {}) })) };
+    const helpers = forbidden();
+    const prescription = full();
+    const started = buildWorkoutEntries(state, config, prescription, helpers);
+    state.active = {
+      id: "ext-frozen-cfg",
+      routineId: routine.id,
+      entries: started,
+    };
+    const liveTrimmed = { ...config, ex: config.ex.filter((cfg) => cfg.id !== CURL) };
+    const rebuilt = buildWorkoutEntries(
+      state,
+      liveTrimmed,
+      prescription,
+      helpers,
+      { externalSessionId: "ext-frozen-cfg" },
+    );
+    expect(rebuilt).toHaveLength(3);
+    expect(rebuilt.map((e) => e.id)).toEqual([LATERAL, BENCH, CURL]);
+    expect(rebuilt[0].sg).toBe("pair");
+    expect(rebuilt[0].sets.map((set) => set.w)).toEqual([10, 14]);
+    expect(rebuilt[2].sets[1]).toEqual({ w: 15, r: 10, done: false });
+    expect(rebuilt[0].plan.weight).toBeUndefined();
     for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
   });
 

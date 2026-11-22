@@ -7,6 +7,7 @@ COPY api/integrations ./integrations
 COPY api/lib ./lib
 COPY frontend/src/lib/exercises-data.js ./lib/exercises-data.js
 COPY frontend/src/lib/equipment-core.js ./lib/equipment-core.js
+COPY frontend/src/lib/lifepilot-prescription-v2-validate.js ./lib/lifepilot-prescription-v2-validate.js
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "server.js"]

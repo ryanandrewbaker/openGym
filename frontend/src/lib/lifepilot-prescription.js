@@ -76,7 +76,12 @@ export function buildEntryFromLifePilotPrescription(cfg, prescription, { v2 = fa
     reps: repsMin,
     sets: setsCount,
   };
-  if (loadKg != null && Number.isFinite(loadKg)) {
+  if (v2) {
+    if (loadKg != null && Number.isFinite(loadKg)) {
+      plan.weight = loadKg;
+    }
+  } else {
+    // v1 retains explicit null scalar weights in the stored plan metadata.
     plan.weight = loadKg;
   }
   return {
@@ -94,6 +99,32 @@ export function buildEntryFromLifePilotPrescription(cfg, prescription, { v2 = fa
   };
 }
 
+function exerciseCfgForFrozenSlot(st, externalSessionId, slot, templateById) {
+  const active = st?.active;
+  if (
+    externalSessionId &&
+    active?.id === externalSessionId &&
+    Array.isArray(active.entries)
+  ) {
+    const frozen = active.entries.find((entry) => String(entry.id) === String(slot.id));
+    if (frozen) {
+      const template = templateById.get(String(slot.id));
+      const target = frozen.target || {};
+      return {
+        ...(template || { id: frozen.id }),
+        id: frozen.id,
+        sg: frozen.sg ?? template?.sg,
+        sets: target.sets ?? template?.sets,
+        reps: target.reps ?? template?.reps,
+        repsMin: target.repsMin ?? template?.repsMin,
+        repsMax: target.repsMax ?? template?.repsMax,
+        weight: target.weight ?? template?.weight,
+      };
+    }
+  }
+  return templateById.get(String(slot.id)) || slot;
+}
+
 export function buildWorkoutEntries(st, routine, prescriptionList, helpers, { externalSessionId = null } = {}) {
   // A full-v2 plan must cover the routine *before* any entries are built.
   // Never fall through to OpenGym progression for an omitted frozen slot.
@@ -104,7 +135,8 @@ export function buildWorkoutEntries(st, routine, prescriptionList, helpers, { ex
     const validated = routineShapeForV2Validation(st, routine, externalSessionId);
     const full = validateFullV2SessionPrescription(prescriptionList, validated);
     const templateById = new Map((routine.ex || []).map((cfg) => [String(cfg.id), cfg]));
-    const ordered = (validated.ex || []).map((slot) => templateById.get(String(slot.id)) || slot);
+    const ordered = (validated.ex || []).map((slot) =>
+      exerciseCfgForFrozenSlot(st, externalSessionId, slot, templateById));
     return ordered.map((cfg, index) =>
       buildEntryFromLifePilotPrescription(cfg, full.exercises[index], { v2: true }));
   }

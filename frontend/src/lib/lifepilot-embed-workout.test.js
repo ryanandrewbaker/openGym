@@ -23,6 +23,39 @@ describe("shouldBeginEmbeddedWorkout", () => {
     ).toBe(false);
   });
 
+  it("preserves frozen active entries when the live routine was reordered or trimmed", () => {
+    const active = {
+      id: "session-sunday",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T01:00:00.000Z"),
+      entries: [
+        {
+          id: "0405",
+          sg: "pair",
+          target: { sets: 2, repsMin: 8, repsMax: 12 },
+          sets: [{ w: 10, r: 8, done: false }, { w: 14, r: 8, done: false }],
+        },
+        {
+          id: "0406",
+          sets: [{ w: 36, r: 10, done: true }],
+        },
+      ],
+    };
+    const snapshot = JSON.stringify(active);
+    const v2 = {
+      mode: "workout",
+      routineId: "shoulders-hinge",
+      externalSessionId: "session-sunday",
+      prescription: { prescriptionContractVersion: 2, prescriptionCoverage: "full", exercises: [] },
+    };
+    expect(shouldBeginEmbeddedWorkout(v2, active, "2026-09-24")).toBe(false);
+    expect(embeddedWorkoutStartAction(v2, active, "2026-09-24")).toBe("notify");
+    expect(JSON.stringify(active)).toBe(snapshot);
+    expect(active.entries[0].sg).toBe("pair");
+    expect(active.entries[0].sets[1].w).toBe(14);
+  });
+
   it("never rebuilds an existing same-session frozen v2 workout, even before its first logged set", () => {
     const v2 = { ...sunday, prescription: { prescriptionContractVersion: 2, prescriptionCoverage: "full", exercises: [] } };
     const active = {
