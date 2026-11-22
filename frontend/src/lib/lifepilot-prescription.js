@@ -14,7 +14,8 @@ const record = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const exactFields = (value, allowed) =>
   Object.keys(value).every((key) => allowed.has(key));
-const positiveInt = (value) => Number.isSafeInteger(value) && value > 0;
+const positiveInt = (value, max) =>
+  Number.isSafeInteger(value) && value > 0 && value <= max;
 const validLoad = (value) =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 
@@ -42,9 +43,9 @@ export function validateFullV2SessionPrescription(value, routine) {
       !exercise.exerciseId.trim() ||
       exercise.exerciseId !== expectedId ||
       seen.has(exercise.exerciseId) ||
-      !positiveInt(exercise.sets) ||
-      !positiveInt(exercise.repsMin) ||
-      !positiveInt(exercise.repsMax) ||
+      !positiveInt(exercise.sets, 100) ||
+      !positiveInt(exercise.repsMin, 1000) ||
+      !positiveInt(exercise.repsMax, 1000) ||
       exercise.repsMax < exercise.repsMin
     ) {
       throw new Error(INVALID);
