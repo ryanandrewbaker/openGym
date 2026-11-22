@@ -10,13 +10,13 @@ export function shouldBeginEmbeddedWorkout(ctx, active, today = null) {
   if (!active) return true;
   // Entries are snapshotted at beginWorkout. A leftover from last Thursday still
   // has exercises later removed from the live routine.
-  if (today && active.d && active.d !== today) return true;
   if (active.routineId && String(active.routineId) !== String(ctx.routineId)) return true;
   if (!ctx.externalSessionId || active.id !== ctx.externalSessionId) return true;
-  // v2 is frozen by MASIS at start. Even an unused same-session workout must
-  // retain its existing snapshot rather than recompute on an embed refresh.
+  // v2 is frozen by MASIS at start. Same external session + routine keeps the
+  // snapshotted workout across embed refreshes, including calendar midnight.
   // Preserve the historical rebuild behaviour for legacy v1 sessions.
   if (ctx.prescription?.prescriptionContractVersion === 2) return false;
+  if (today && active.d && active.d !== today) return true;
   return !activeWorkoutHasCompletedSet(active);
 }
 
