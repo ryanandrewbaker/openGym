@@ -10,7 +10,8 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "node server.js",
-    "test": "test -f lib/exercises-data.js || cp ../frontend/src/lib/exercises-data.js lib/exercises-data.js; test -f lib/equipment-core.js || cp ../frontend/src/lib/equipment-core.js lib/equipment-core.js; LIFEPILOT_OPENGYM_SERVICE_SECRET=test-service-secret node --test integrations/*.test.js lib/gym-state-merge.test.js lib/equipment-core.test.js lib/pb-reset.test.js lib/routine-exercise-loads.test.js"
+    "test": "test -f lib/exercises-data.js || cp ../frontend/src/lib/exercises-data.js lib/exercises-data.js; test -f lib/equipment-core.js || cp ../frontend/src/lib/equipment-core.js lib/equipment-core.js; cp ../frontend/src/lib/lifepilot-prescription-v2-validate.js lib/lifepilot-prescription-v2-validate.js; LIFEPILOT_OPENGYM_SERVICE_SECRET=test-service-secret node --test integrations/*.test.js lib/gym-state-merge.test.js lib/equipment-core.test.js lib/pb-reset.test.js lib/routine-exercise-loads.test.js",
+    "check:production-imports": "cp ../frontend/src/lib/lifepilot-prescription-v2-validate.js lib/lifepilot-prescription-v2-validate.js 2>/dev/null || true; node --input-type=module -e \"import './integrations/lifepilot-prescription-v2.js'; import './integrations/lifepilot.js'\""
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.1.1",

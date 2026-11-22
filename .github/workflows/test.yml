@@ -4,6 +4,7 @@ name: Tests
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'api/**'
       - 'frontend/**'
@@ -59,6 +60,17 @@ jobs:
         working-directory: api
       - run: npm test
         working-directory: api
+      - run: npm run check:production-imports
+        working-directory: api
+
+  api-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build API production image
+        run: docker build -f api/Dockerfile -t opengym-api:ci .
+      - name: Smoke production module graph
+        run: docker run --rm opengym-api:ci node --input-type=module -e "import { validateFullV2SessionPrescription } from './integrations/lifepilot-prescription-v2.js'; console.log(typeof validateFullV2SessionPrescription)"
 
   mcp:
     runs-on: ubuntu-latest

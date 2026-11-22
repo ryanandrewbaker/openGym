@@ -23,6 +23,161 @@ describe("shouldBeginEmbeddedWorkout", () => {
     ).toBe(false);
   });
 
+  const frozenV2Ctx = (sessionId = "session-sunday") => ({
+    mode: "workout",
+    routineId: "shoulders-hinge",
+    externalSessionId: sessionId,
+    prescription: { prescriptionContractVersion: 2, prescriptionCoverage: "full", exercises: [] },
+  });
+
+  function resumeDecision(ctx, active, today) {
+    const begin = shouldBeginEmbeddedWorkout(ctx, active, today);
+    const action = embeddedWorkoutStartAction(ctx, active, today);
+    return { begin, action, activeSnapshot: JSON.stringify(active) };
+  }
+
+  it("notifies without rebuilding when the live routine was deleted but frozen active remains", () => {
+    const active = {
+      id: "session-deleted-routine",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T12:00:00.000Z"),
+      entries: [
+        {
+          id: "0405",
+          sg: "pair",
+          sets: [{ w: 10, r: 8, done: true }, { w: 14, r: 8, done: false }],
+        },
+      ],
+    };
+    const ctx = frozenV2Ctx("session-deleted-routine");
+    expect(resumeDecision(ctx, active, "2026-09-25")).toMatchObject({
+      begin: false,
+      action: "notify",
+    });
+  });
+
+  it("preserves a v2 workout resumed after midnight when sets were already completed", () => {
+    const active = {
+      id: "session-midnight",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T23:50:00.000Z"),
+      entries: [
+        {
+          id: "0405",
+          sg: "pair",
+          target: { sets: 2, repsMin: 8, repsMax: 12 },
+          sets: [{ w: 10, r: 8, done: true }, { w: 14, r: 8, done: false }],
+        },
+      ],
+    };
+    const before = JSON.stringify(active);
+    expect(resumeDecision(frozenV2Ctx("session-midnight"), active, "2026-09-25")).toEqual({
+      begin: false,
+      action: "notify",
+      activeSnapshot: before,
+    });
+    expect(active.entries[0].sets[0].done).toBe(true);
+    expect(active.entries[0].sets[0].w).toBe(10);
+    expect(active.start).toBe(Date.parse("2026-09-24T23:50:00.000Z"));
+  });
+
+  it("preserves a v2 workout resumed after midnight before any sets are completed", () => {
+    const active = {
+      id: "session-midnight",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T23:55:00.000Z"),
+      entries: [{ id: "0405", sets: [{ w: 10, r: 8, done: false }, { w: 14, r: 8, done: false }] }],
+    };
+    const ctx = frozenV2Ctx("session-midnight");
+    const { begin, action } = resumeDecision(ctx, active, "2026-09-25");
+    expect(begin).toBe(false);
+    expect(action).toBe("notify");
+  });
+
+  it("replaces an active workout when LifePilot issues a different external session id", () => {
+    const ctx = frozenV2Ctx("session-new");
+    const active = {
+      id: "session-old",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      entries: [{ id: "0405", sets: [{ w: 10, r: 8, done: true }] }],
+    };
+    expect(shouldBeginEmbeddedWorkout(ctx, active, "2026-09-25")).toBe(true);
+    expect(embeddedWorkoutStartAction(ctx, active, "2026-09-25")).toBe("begin");
+  });
+
+  it("still rebuilds legacy v1 sessions that cross midnight on the same external id", () => {
+    const ctx = {
+      mode: "workout",
+      routineId: "back-shoulders-biceps",
+      externalSessionId: "session-old-thursday",
+      prescription: [{ exerciseId: "0327", sets: 3, loadKg: 20, repsMin: 8, repsMax: 12 }],
+    };
+    const active = {
+      id: "session-old-thursday",
+      routineId: "back-shoulders-biceps",
+      d: "2026-09-10",
+      entries: [{ id: "0327", sets: [{ w: 20, r: 8, done: true }] }],
+    };
+    expect(shouldBeginEmbeddedWorkout(ctx, active, "2026-09-19")).toBe(true);
+    expect(embeddedWorkoutStartAction(ctx, active, "2026-09-19")).toBe("begin");
+  });
+
+  it("preserves frozen active entries when the live routine was reordered or trimmed", () => {
+    const active = {
+      id: "session-sunday",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T01:00:00.000Z"),
+      entries: [
+        {
+          id: "0405",
+          sg: "pair",
+          target: { sets: 2, repsMin: 8, repsMax: 12 },
+          sets: [{ w: 10, r: 8, done: false }, { w: 14, r: 8, done: false }],
+        },
+        {
+          id: "0406",
+          sets: [{ w: 36, r: 10, done: true }],
+        },
+      ],
+    };
+    const snapshot = JSON.stringify(active);
+    const v2 = {
+      mode: "workout",
+      routineId: "shoulders-hinge",
+      externalSessionId: "session-sunday",
+      prescription: { prescriptionContractVersion: 2, prescriptionCoverage: "full", exercises: [] },
+    };
+    expect(shouldBeginEmbeddedWorkout(v2, active, "2026-09-24")).toBe(false);
+    expect(embeddedWorkoutStartAction(v2, active, "2026-09-24")).toBe("notify");
+    expect(JSON.stringify(active)).toBe(snapshot);
+    expect(active.entries[0].sg).toBe("pair");
+    expect(active.entries[0].sets[1].w).toBe(14);
+    expect(resumeDecision(v2, active, "2026-09-25")).toMatchObject({
+      begin: false,
+      action: "notify",
+      activeSnapshot: snapshot,
+    });
+  });
+
+  it("never rebuilds an existing same-session frozen v2 workout, even before its first logged set", () => {
+    const v2 = { ...sunday, prescription: { prescriptionContractVersion: 2, prescriptionCoverage: "full", exercises: [] } };
+    const active = {
+      id: "session-sunday",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T01:00:00.000Z"),
+      entries: [{ id: "0405", sets: [{ w: 10, r: 8, done: false }, { w: 14, r: 8, done: false }] }],
+    };
+    expect(shouldBeginEmbeddedWorkout(v2, active, "2026-09-24")).toBe(false);
+    expect(embeddedWorkoutStartAction(v2, active, "2026-09-24")).toBe("notify");
+    expect(embeddedWorkoutStartAction(v2, null, "2026-09-24")).toBe("begin");
+  });
+
   it("rebuilds today's unused session so later routine edits replace the snapshot", () => {
     expect(
       shouldBeginEmbeddedWorkout(

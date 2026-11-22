@@ -81,6 +81,7 @@ describe("buildWorkoutEntries", () => {
     );
     expect(entry.sets[0].w).toBeUndefined();
     expect(entry.target.weight).toBeUndefined();
+    expect(entry.plan.weight).toBeNull();
   });
 
   it("uses nextPrescription when no LifePilot prescription is present", () => {
@@ -181,5 +182,144 @@ describe("applyLifePilotPrescription", () => {
     expect(out[0]).toEqual({ w: 32, r: 8, done: true });
     expect(out[1].w).toBe(34);
     expect(out[1].r).toBe(8);
+  });
+});
+
+
+describe("MASIS-157 full v2 frozen prescription", () => {
+  const full = () => ({
+    prescriptionContractVersion: 2,
+    prescriptionCoverage: "full",
+    exercises: [
+      { exerciseId: LATERAL, sets: 2, repsMin: 8, repsMax: 12, prefillLoadsKg: [10, 14] },
+      { exerciseId: BENCH, sets: 3, repsMin: 8, repsMax: 8, loadKg: 36, prefillLoadsKg: [36, 36, 36] },
+      { exerciseId: CURL, sets: 2, repsMin: 10, repsMax: 12, prefillLoadsKg: [null, 15] },
+    ],
+  });
+
+  const forbidden = () => ({
+    nextPrescription: vi.fn(() => { throw new Error("live progression must not run"); }),
+    buildSets: vi.fn(() => { throw new Error("live buildSets must not run"); }),
+    applyPrescription: vi.fn(() => { throw new Error("live applyPrescription must not run"); }),
+  });
+
+  it("preserves heterogeneous per-index loads, null as unset, rep targets, order, and supersets", () => {
+    const state = openGymState();
+    const old = JSON.stringify(state);
+    const config = { ...routine, ex: routine.ex.map((cfg, i) => ({ ...cfg, ...(i < 2 ? { sg: "pair" } : {}) })) };
+    const helpers = forbidden();
+    const entries = buildWorkoutEntries(state, config, full(), helpers);
+    expect(entries.map((e) => e.id)).toEqual([LATERAL, BENCH, CURL]);
+    expect(entries[0].sets.map((set) => set.w)).toEqual([10, 14]);
+    expect(entries[0].target.weight).toBeUndefined();
+    expect(entries[0].target.repsMin).toBe(8);
+    expect(entries[0].target.repsMax).toBe(12);
+    expect(entries[0].sg).toBe("pair");
+    expect(entries[1].sg).toBe("pair");
+    expect(entries[1].sets.map((set) => set.w)).toEqual([36, 36, 36]);
+    expect(entries[1].target.weight).toBe(36);
+    expect(entries[2].sets[0]).toEqual({ r: 10, done: false });
+    expect(entries[2].sets[1]).toEqual({ w: 15, r: 10, done: false });
+    expect(entries[0].plan.weight).toBeUndefined();
+    expect(JSON.stringify(state)).toBe(old);
+    for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("allows a full v2 exercise with neither loadKg nor prefillLoadsKg (all sets unset)", () => {
+    const state = openGymState();
+    const payload = full();
+    delete payload.exercises[2].prefillLoadsKg;
+    const helpers = forbidden();
+    const entries = buildWorkoutEntries(state, routine, payload, helpers);
+    expect(entries[2].sets.every((set) => set.w === undefined)).toBe(true);
+    expect(entries[2].plan.weight).toBeUndefined();
+    for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds frozen cfg from active entries when a slot was removed from the live routine", () => {
+    const state = openGymState();
+    const config = { ...routine, ex: routine.ex.map((cfg, i) => ({ ...cfg, ...(i < 2 ? { sg: "pair" } : {}) })) };
+    const helpers = forbidden();
+    const prescription = full();
+    const started = buildWorkoutEntries(state, config, prescription, helpers);
+    state.active = {
+      id: "ext-frozen-cfg",
+      routineId: routine.id,
+      entries: started,
+    };
+    const liveTrimmed = { ...config, ex: config.ex.filter((cfg) => cfg.id !== CURL) };
+    const rebuilt = buildWorkoutEntries(
+      state,
+      liveTrimmed,
+      prescription,
+      helpers,
+      { externalSessionId: "ext-frozen-cfg" },
+    );
+    expect(rebuilt).toHaveLength(3);
+    expect(rebuilt.map((e) => e.id)).toEqual([LATERAL, BENCH, CURL]);
+    expect(rebuilt[0].sg).toBe("pair");
+    expect(rebuilt[0].sets.map((set) => set.w)).toEqual([10, 14]);
+    expect(rebuilt[2].sets[1]).toEqual({ w: 15, r: 10, done: false });
+    expect(rebuilt[0].plan.weight).toBeUndefined();
+    for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("validates v2 against frozen active entry order when resuming the same session", () => {
+    const state = openGymState();
+    const reordered = { ...routine, ex: [...routine.ex].reverse() };
+    const frozenOrder = [...routine.ex];
+    const prescription = {
+      prescriptionContractVersion: 2,
+      prescriptionCoverage: "full",
+      exercises: frozenOrder.map((cfg) => ({
+        exerciseId: cfg.id,
+        sets: cfg.sets,
+        repsMin: 8,
+        repsMax: 12,
+        prefillLoadsKg: Array(cfg.sets).fill(10),
+      })),
+    };
+    state.active = {
+      id: "ext-resume",
+      routineId: routine.id,
+      entries: frozenOrder.map((cfg) => ({ id: cfg.id, sets: [] })),
+    };
+    const helpers = forbidden();
+    expect(() =>
+      buildWorkoutEntries(state, reordered, prescription, helpers, { externalSessionId: "ext-resume" }),
+    ).not.toThrow();
+    expect(() =>
+      buildWorkoutEntries(state, reordered, prescription, helpers, { externalSessionId: "new-session" }),
+    ).toThrow("invalid_v2_prescription");
+  });
+
+  it("rejects malformed v2 full snapshots without running progression", () => {
+    const bad = [
+      (x) => { x.prescriptionContractVersion = 3; },
+      (x) => { x.prescriptionCoverage = "partial"; },
+      (x) => { x.exercises.pop(); },
+      (x) => { x.exercises.reverse(); },
+      (x) => { x.exercises[1].exerciseId = LATERAL; },
+      (x) => { x.exercises[1].exerciseId = "unknown"; },
+      (x) => { x.exercises[0].prefillLoadsKg = [10]; },
+      (x) => { x.exercises[0].prefillLoadsKg = [10, "14"]; },
+      (x) => { x.exercises[0].prefillLoadsKg = [10, -2]; },
+      (x) => { x.exercises[0].sets = "2"; },
+      (x) => { x.exercises[0].sets = 101; },
+      (x) => { x.exercises[0].repsMax = 1001; },
+      (x) => { x.exercises[0].repsMin = 0; },
+      (x) => { x.exercises[1].prefillLoadsKg = [35, 36, 36]; },
+      (x) => { x.exercises[1].loadKg = null; },
+      (x) => { x.exercises[2].prefillLoadsKg = [null, Infinity]; },
+      (x) => { x.exercises[1].unknownField = 99; },
+    ];
+    for (const mutate of bad) {
+      const value = full();
+      mutate(value);
+      const helpers = forbidden();
+      expect(() => buildWorkoutEntries(openGymState(), routine, value, helpers))
+        .toThrow("invalid_v2_prescription");
+      for (const fn of Object.values(helpers)) expect(fn).not.toHaveBeenCalled();
+    }
   });
 });
