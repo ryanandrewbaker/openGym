@@ -559,7 +559,15 @@ export function registerLifePilotRoutes(routes, deps) {
     let prescription;
     if (body.prescription != null && !Array.isArray(body.prescription)) {
       const state = readState(user.id);
-      const routine = (state?.routines || []).find((item) => String(item.id) === routineId);
+      const template = (state?.routines || []).find((item) => String(item.id) === routineId);
+      // On an actual same-session resume, the already-started workout is the
+      // source of exercise coverage/order. The live routine may have changed.
+      const active = state?.active;
+      const frozenSession = active?.id === externalSessionId &&
+        String(active.routineId) === routineId && Array.isArray(active.entries)
+        ? { ex: active.entries.map((entry) => ({ id: entry.id })) }
+        : null;
+      const routine = frozenSession || template;
       if (!routine) return json(res, 404, { error: "routine_not_found" });
       try {
         prescription = validateFullV2SessionPrescription(body.prescription, routine);
