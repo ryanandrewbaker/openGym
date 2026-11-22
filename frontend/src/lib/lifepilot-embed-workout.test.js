@@ -23,6 +23,20 @@ describe("shouldBeginEmbeddedWorkout", () => {
     ).toBe(false);
   });
 
+  it("never rebuilds an existing same-session frozen v2 workout, even before its first logged set", () => {
+    const v2 = { ...sunday, prescription: { prescriptionContractVersion: 2, prescriptionCoverage: "full", exercises: [] } };
+    const active = {
+      id: "session-sunday",
+      routineId: "shoulders-hinge",
+      d: "2026-09-24",
+      start: Date.parse("2026-09-24T01:00:00.000Z"),
+      entries: [{ id: "0405", sets: [{ w: 10, r: 8, done: false }, { w: 14, r: 8, done: false }] }],
+    };
+    expect(shouldBeginEmbeddedWorkout(v2, active, "2026-09-24")).toBe(false);
+    expect(embeddedWorkoutStartAction(v2, active, "2026-09-24")).toBe("notify");
+    expect(embeddedWorkoutStartAction(v2, null, "2026-09-24")).toBe("begin");
+  });
+
   it("rebuilds today's unused session so later routine edits replace the snapshot", () => {
     expect(
       shouldBeginEmbeddedWorkout(
